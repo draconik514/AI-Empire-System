@@ -68,7 +68,8 @@ def supabase_get_queued_shorts():
         res = subprocess.run(
             ["curl.exe", "-s", "--max-time", "15", url, "-H", f"apikey: {SUPABASE_KEY}", "-H", f"Authorization: Bearer {SUPABASE_KEY}"],
             capture_output=True,
-            text=True,
+            encoding="utf-8",
+            errors="replace",
             check=True,
         )
         return json.loads(res.stdout) if res.stdout.strip() else []
@@ -85,7 +86,8 @@ def supabase_get_latest_short():
         res = subprocess.run(
             ["curl.exe", "-s", "--max-time", "15", url, "-H", f"apikey: {SUPABASE_KEY}", "-H", f"Authorization: Bearer {SUPABASE_KEY}"],
             capture_output=True,
-            text=True,
+            encoding="utf-8",
+            errors="replace",
             check=True,
         )
         return json.loads(res.stdout) if res.stdout.strip() else []
@@ -643,7 +645,7 @@ def process_one_job(force_latest: bool = False):
     log("🔍 Memeriksa antrean video di Supabase...")
     items = supabase_get_queued_shorts()
     if not items and force_latest:
-        log("🔄 Mengambil video terakhir untuk di-render ulang dengan Engine 3D + Karakter...")
+        log("🔄 Mengambil video terakhir untuk di-render...")
         items = supabase_get_latest_short()
 
     if not items:
@@ -651,7 +653,33 @@ def process_one_job(force_latest: bool = False):
         return False
 
     item = items[0]
-    log(f"🚀 Memproses Video: [{item.get('niche')}] '{item.get('title')}'")
+    niche = item.get("niche", "Edukasi_CalonSarjana")
+    log(f"🚀 Memproses Video: [{niche}] '{item.get('title')}'")
+
+    if niche == "Islamic":
+        import render_islamic_zcode as isl
+        short_id = item.get("id", f"local_{int(time.time())}")
+        title = item.get("title", "2 Cara Atasi Masalah Hidup! - Solusi Islami")
+        script = item.get("full_script") or item.get("hook_text") or "Solusi Islami hari ini."
+        source = item.get("source_channel") or "RaymondChin"
+        
+        tag = f"islamic_{short_id}"
+        audio_path = os.path.join(WORK_DIR, f"{tag}.mp3")
+        ass_path = os.path.join(WORK_DIR, f"{tag}.ass")
+        output_mp4 = os.path.join(WORK_DIR, f"{tag}.mp4")
+        
+        dur = asyncio.run(isl.generate_voice_and_subtitles(script, audio_path, ass_path, source, title))
+        isl.render_islamic_video(audio_path, ass_path, output_mp4, dur, title)
+        tg_url = isl.send_to_telegram(output_mp4, title, source)
+        
+        supabase_update_status(
+            item["id"],
+            "Review_in_Telegram",
+            tg_msg_url=tg_url,
+            extra={"engine_used": "Islamic Z-Code Pipeline (Crop 9:16 + Subtitle Kuning/Merah + Watermark + Filter 4K)"}
+        )
+        log("🎉 Alur produksi video Islamic Z-Code selesai! Silakan cek Telegram Anda.")
+        return True
 
     video_path = render_shorts_video(item)
     tg_url = send_video_to_telegram(video_path, item)
