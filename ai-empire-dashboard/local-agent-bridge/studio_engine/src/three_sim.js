@@ -17,6 +17,10 @@
   let predatorData = null;
   let infectionData = null;
   let dnaData = null;
+  let wildfireData = null;
+  let peatlandData = null;
+  let smokeHazeData = null;
+  let hotspotRadarData = null;
   let particlesMesh = null;
 
   window.initThreeSim = function () {
@@ -79,6 +83,10 @@
     buildPredatorScene();
     buildInfectionScene();
     buildDnaScene();
+    buildWildfireScene();
+    buildPeatlandScene();
+    buildSmokeHazeScene();
+    buildHotspotRadarScene();
   };
 
   // ---------------------------------------------------------------------------
@@ -423,6 +431,238 @@
   }
 
   // ---------------------------------------------------------------------------
+  // 6. WILDFIRE INFERNO: RAGING KALIMANTAN FOREST FIRE & SWIRLING EMBERS
+  // ---------------------------------------------------------------------------
+  function buildWildfireScene() {
+    const g = new THREE.Group();
+
+    // Ground scorched charcoal earth
+    const groundGeo = new THREE.PlaneGeometry(28, 22, 16, 16);
+    const groundMat = new THREE.MeshPhongMaterial({
+      color: 0x1a0802,
+      emissive: 0x220500,
+      roughness: 0.95,
+    });
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -3.8;
+    g.add(ground);
+
+    // 14 Burnt Tree Trunks with glowing fire cracks
+    const trees = [];
+    for (let i = 0; i < 14; i++) {
+      const h = 4.5 + hash(i * 3.3) * 3.2;
+      const trunkGeo = new THREE.CylinderGeometry(0.18, 0.32, h, 8);
+      const trunkMat = new THREE.MeshPhongMaterial({
+        color: 0x0f0502,
+        emissive: i % 2 === 0 ? 0x661800 : 0x330800,
+        roughness: 0.9,
+      });
+      const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+      const tx = (hash(i * 7.1) - 0.5) * 18;
+      const tz = (hash(i * 13.7) - 0.5) * 12 - 2;
+      trunk.position.set(tx, -3.8 + h / 2, tz);
+      trunk.rotation.z = (hash(i * 5.5) - 0.5) * 0.22;
+      g.add(trunk);
+
+      // Glowing flame cones on branch nodes
+      const flameGeo = new THREE.ConeGeometry(0.35, 1.2, 6);
+      const flameMat = new THREE.MeshBasicMaterial({ color: i % 2 === 0 ? 0xff5500 : 0xffaa00 });
+      const flame = new THREE.Mesh(flameGeo, flameMat);
+      flame.position.set(tx + 0.1, -3.8 + h * 0.75, tz);
+      g.add(flame);
+
+      trees.push({ trunk, flame, tx, tz, h, phase: i * 0.7 });
+    }
+
+    // 400 Flying Swirling Fire Ember Particles
+    const emberCount = 400;
+    const emberGeo = new THREE.BufferGeometry();
+    const emberPos = new Float32Array(emberCount * 3);
+    const emberColors = new Float32Array(emberCount * 3);
+    for (let i = 0; i < emberCount; i++) {
+      emberPos[i * 3] = (hash(i * 2.7) - 0.5) * 20;
+      emberPos[i * 3 + 1] = -3.5 + hash(i * 9.1) * 9;
+      emberPos[i * 3 + 2] = (hash(i * 5.3) - 0.5) * 14;
+
+      const isYellow = hash(i * 11.2) > 0.45;
+      emberColors[i * 3] = 1.0;
+      emberColors[i * 3 + 1] = isYellow ? 0.75 : 0.25;
+      emberColors[i * 3 + 2] = 0.0;
+    }
+    emberGeo.setAttribute("position", new THREE.BufferAttribute(emberPos, 3));
+    emberGeo.setAttribute("color", new THREE.BufferAttribute(emberColors, 3));
+    const emberMat = new THREE.PointsMaterial({
+      size: 0.35,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.95,
+    });
+    const embersMesh = new THREE.Points(emberGeo, emberMat);
+    g.add(embersMesh);
+
+    // Dynamic fire light
+    const fireLight = new THREE.PointLight(0xff5500, 4.5, 35);
+    fireLight.position.set(0, 0, 5);
+    g.add(fireLight);
+
+    scene.add(g);
+    groups.wildfire_inferno = g;
+    wildfireData = { ground, trees, embersMesh, emberPos, fireLight };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 7. PEATLAND DEEP FIRE: 4-METER UNDERGROUND SMOLDERING COMBUSTION
+  // ---------------------------------------------------------------------------
+  function buildPeatlandScene() {
+    const g = new THREE.Group();
+
+    // Peat soil cutaway block (showing surface and underground cross-section)
+    const blockGeo = new THREE.BoxGeometry(16, 5.5, 9);
+    const blockMat = new THREE.MeshPhongMaterial({
+      color: 0x1f1008,
+      emissive: 0x150803,
+      roughness: 0.95,
+    });
+    const block = new THREE.Mesh(blockGeo, blockMat);
+    block.position.set(0, -1.8, 0);
+    g.add(block);
+
+    // Underground Magma-like Smoldering Peat Embers (Core)
+    const emberCoreGeo = new THREE.BoxGeometry(13, 2.2, 7);
+    const emberCoreMat = new THREE.MeshPhongMaterial({
+      color: 0xff2200,
+      emissive: 0xff3b00,
+      shininess: 90,
+      transparent: true,
+      opacity: 0.85,
+    });
+    const emberCore = new THREE.Mesh(emberCoreGeo, emberCoreMat);
+    emberCore.position.set(0, -2.4, 0.4);
+    g.add(emberCore);
+
+    // 8 Fissure Smoke Plumes emerging from the ground cracks
+    const plumes = [];
+    for (let i = 0; i < 8; i++) {
+      const pCount = 18;
+      const pGroup = new THREE.Group();
+      const fx = (i - 3.5) * 1.8 + (hash(i * 3.7) - 0.5) * 0.6;
+      const fz = (hash(i * 8.3) - 0.5) * 3.5;
+      pGroup.position.set(fx, 1.0, fz);
+
+      const puffs = [];
+      for (let p = 0; p < pCount; p++) {
+        const puffMat = new THREE.MeshBasicMaterial({
+          color: p % 2 === 0 ? 0xd4a373 : 0x8d99ae,
+          transparent: true,
+          opacity: 0.55 - p * 0.025,
+        });
+        const puff = new THREE.Mesh(new THREE.SphereGeometry(0.35 + p * 0.1, 8, 8), puffMat);
+        pGroup.add(puff);
+        puffs.push(puff);
+      }
+      g.add(pGroup);
+      plumes.push({ pGroup, puffs, fx, fz, phase: i * 0.9 });
+    }
+
+    scene.add(g);
+    groups.peatland_deep_fire = g;
+    peatlandData = { block, emberCore, plumes };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 8. SMOKE HAZE & APOCALYPTIC BLOOD RED SKY (RAYLEIGH SCATTERING)
+  // ---------------------------------------------------------------------------
+  function buildSmokeHazeScene() {
+    const g = new THREE.Group();
+
+    // Dim eerie blood red sun
+    const sunGeo = new THREE.SphereGeometry(2.4, 28, 28);
+    const sunMat = new THREE.MeshBasicMaterial({ color: 0xff1e00 });
+    const sun = new THREE.Mesh(sunGeo, sunMat);
+    sun.position.set(0, 3.2, -10);
+    g.add(sun);
+
+    // Sun atmospheric halo
+    const haloGeo = new THREE.RingGeometry(2.6, 5.2, 32);
+    const haloMat = new THREE.MeshBasicMaterial({
+      color: 0xff4500,
+      transparent: true,
+      opacity: 0.5,
+      side: THREE.DoubleSide,
+    });
+    const halo = new THREE.Mesh(haloGeo, haloMat);
+    halo.position.set(0, 3.2, -9.9);
+    g.add(halo);
+
+    // 250 Floating Dense Toxic Haze Particles
+    const hazeCount = 250;
+    const hazeGeo = new THREE.BufferGeometry();
+    const hazePos = new Float32Array(hazeCount * 3);
+    for (let i = 0; i < hazeCount; i++) {
+      hazePos[i * 3] = (hash(i * 3.1) - 0.5) * 26;
+      hazePos[i * 3 + 1] = (hash(i * 7.7) - 0.5) * 16;
+      hazePos[i * 3 + 2] = (hash(i * 11.3) - 0.5) * 18;
+    }
+    hazeGeo.setAttribute("position", new THREE.BufferAttribute(hazePos, 3));
+    const hazeMat = new THREE.PointsMaterial({
+      color: 0xcc3311,
+      size: 0.95,
+      transparent: true,
+      opacity: 0.65,
+    });
+    const hazeMesh = new THREE.Points(hazeGeo, hazeMat);
+    g.add(hazeMesh);
+
+    scene.add(g);
+    groups.smoke_haze = g;
+    smokeHazeData = { sun, halo, hazeMesh };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 9. SATELLITE RADAR & THERMAL HOTSPOTS MAP
+  // ---------------------------------------------------------------------------
+  function buildHotspotRadarScene() {
+    const g = new THREE.Group();
+
+    // Holographic radar grid ring
+    const gridGeo = new THREE.RingGeometry(0.2, 7.5, 48, 8);
+    const gridMat = new THREE.MeshBasicMaterial({
+      color: 0x00f5d4,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.35,
+      side: THREE.DoubleSide,
+    });
+    const grid = new THREE.Mesh(gridGeo, gridMat);
+    grid.rotation.x = -Math.PI / 2.8;
+    g.add(grid);
+
+    // Radar scanning sweep line
+    const sweepGeo = new THREE.CylinderGeometry(0.04, 0.04, 7.2, 8);
+    const sweepMat = new THREE.MeshBasicMaterial({ color: 0x00f5d4 });
+    const sweep = new THREE.Mesh(sweepGeo, sweepMat);
+    sweep.rotation.z = Math.PI / 2;
+    g.add(sweep);
+
+    // 45 Pulsing Red Thermal Hotspot Points across Borneo Map area
+    const hotspots = [];
+    for (let i = 0; i < 45; i++) {
+      const hMat = new THREE.MeshBasicMaterial({ color: 0xff0033 });
+      const hMesh = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 10), hMat);
+      const hx = (hash(i * 4.9) - 0.5) * 9.5;
+      const hz = (hash(i * 12.1) - 0.5) * 6.5;
+      hMesh.position.set(hx, -0.2, hz);
+      g.add(hMesh);
+      hotspots.push({ mesh: hMesh, baseScale: 0.8 + hash(i * 6.7) * 0.6, phase: i * 0.4 });
+    }
+
+    scene.add(g);
+    groups.hotspot_radar = g;
+    hotspotRadarData = { grid, sweep, hotspots };
+  }
+
+  // ---------------------------------------------------------------------------
   // RENDER AT EXACT TIMELINE TIME t (DETERMINISTIC)
   // ---------------------------------------------------------------------------
   window.renderThreeAt = function (t, lt, dur, mode) {
@@ -565,6 +805,90 @@
       }
 
       camera.position.set(0, Math.sin(t * 0.7) * 2.2, 13.5);
+      camera.lookAt(0, 0, 0);
+    } else if (mode === "wildfire_inferno") {
+      scene.background.setHex(0x160400);
+      scene.fog.color.setHex(0x220500);
+      const { trees, emberPos, embersMesh, fireLight } = wildfireData;
+
+      // Tree flickering branches & flame scales
+      for (let i = 0; i < trees.length; i++) {
+        const tr = trees[i];
+        const flk = Math.sin(t * 12 + tr.phase);
+        tr.flame.scale.set(1 + flk * 0.25, 1 + flk * 0.35, 1 + flk * 0.25);
+      }
+
+      // Rising turbulent fire ember particles
+      const posAttr = embersMesh.geometry.attributes.position;
+      for (let i = 0; i < 400; i++) {
+        let ey = emberPos[i * 3 + 1] + t * 4.2;
+        ey = ((ey + 3.5) % 11) - 3.5;
+        posAttr.array[i * 3 + 1] = ey;
+        posAttr.array[i * 3] = emberPos[i * 3] + Math.sin(t * 5 + i) * 0.35;
+      }
+      posAttr.needsUpdate = true;
+
+      // Dynamic fire flame flicker
+      fireLight.intensity = 3.5 + Math.sin(t * 16) * 1.5;
+      camera.position.set(Math.sin(t * 0.4) * 4.5, 0.5, 13.5);
+      camera.lookAt(0, -0.4, 0);
+    } else if (mode === "peatland_deep_fire") {
+      scene.background.setHex(0x140602);
+      scene.fog.color.setHex(0x1d0803);
+      const { emberCore, plumes } = peatlandData;
+
+      // Underground smoldering peat ember core pulsing with heat
+      const corePulse = Math.sin(t * 3.5);
+      emberCore.scale.set(1 + corePulse * 0.04, 1 + corePulse * 0.06, 1 + corePulse * 0.04);
+
+      // Billowing acrid smoke venting through fissures
+      for (let i = 0; i < plumes.length; i++) {
+        const pl = plumes[i];
+        for (let p = 0; p < pl.puffs.length; p++) {
+          const pf = pl.puffs[p];
+          const puffProg = ((t * 1.8 + pl.phase + p * 0.08) % 1);
+          pf.position.y = puffProg * 5.0;
+          pf.position.x = Math.sin(t * 3 + p) * 0.35 * (1 + puffProg * 2);
+          pf.scale.setScalar(0.4 + puffProg * 1.6);
+        }
+      }
+
+      camera.position.set(Math.sin(t * 0.45) * 5, 1.2, 12.8);
+      camera.lookAt(0, -0.8, 0);
+    } else if (mode === "smoke_haze") {
+      scene.background.setHex(0x280702);
+      scene.fog.color.setHex(0x380b03);
+      const { sun, halo, hazeMesh } = smokeHazeData;
+
+      // Eerie dim red sun pulsating through dense haze
+      const sPulse = Math.sin(t * 2);
+      sun.scale.setScalar(1 + sPulse * 0.05);
+      halo.rotation.z = t * 0.2;
+
+      // Swirling toxic smog haze particles
+      hazeMesh.rotation.y = t * 0.15;
+      hazeMesh.rotation.x = Math.sin(t * 0.2) * 0.1;
+
+      camera.position.set(Math.sin(t * 0.3) * 3.5, 1.0, 13.0);
+      camera.lookAt(0, 1.5, 0);
+    } else if (mode === "hotspot_radar") {
+      scene.background.setHex(0x040e16);
+      scene.fog.color.setHex(0x040e16);
+      const { grid, sweep, hotspots } = hotspotRadarData;
+
+      // Radar scanning sweep rotation
+      sweep.rotation.y = t * 2.8;
+      grid.rotation.z = t * 0.15;
+
+      // Thermal hotspots flashing like satellite infrared detections
+      for (let i = 0; i < hotspots.length; i++) {
+        const hs = hotspots[i];
+        const fl = Math.sin(t * 8 + hs.phase);
+        const sc = hs.baseScale * (0.8 + 0.4 * Math.max(0, fl));
+        hs.mesh.scale.setScalar(sc);
+      }
+
+      camera.position.set(0, 4.8, 11.5);
       camera.lookAt(0, 0, 0);
     }
 

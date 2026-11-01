@@ -174,10 +174,11 @@ def get_audio_duration(audio_path: str) -> float:
 
 
 def build_multi_scene_plan(item: dict, duration: float, words: list) -> dict:
-    """Bangun 7 Scene Dinamis 3D Three.js + Solo Presenter Cowok (Ren) + Remotion Physics & Consistent Karaoke."""
-    title = item.get("title") or "Makhluk yang Bisa Memutar Balik Usia!"
-    
-    # Deteksi posisi kata kunci untuk timing transisi scene yang presisi
+    """Bangun Multi-Scene Dinamis 3D Three.js + Solo Presenter Cowok (Ren) + Remotion Physics & Consistent Karaoke."""
+    title = item.get("title") or "Fakta Sains & Misteri Dunia!"
+    corpus = (item.get("title", "") + " " + item.get("full_script", "") + " " + item.get("hook_text", "")).lower()
+
+    # Helper cari waktu kemunculan kata kunci
     def find_word_time(keywords, fallback_ratio):
         for w in words:
             clean_w = w.get("text", "").lower().strip(".,!?;:\"'")
@@ -185,7 +186,133 @@ def build_multi_scene_plan(item: dict, duration: float, words: list) -> dict:
                 return max(1.5, w.get("start", 0.0) - 0.4)
         return round(duration * fallback_ratio, 2)
 
-    # Identifikasi titik pergantian scene berdasarkan naskah
+    # -------------------------------------------------------------------------
+    # KATEGORI 1: KEBAKARAN HUTAN / KALIMANTAN / LAHAN GAMBUT / BENCANA ALAM
+    # -------------------------------------------------------------------------
+    if any(k in corpus for k in ["kebakaran", "api", "hutan", "kalimantan", "gambut", "asap", "bencana"]):
+        t_peat = find_word_time(["bawah", "tanah", "gambut", "briket", "meter"], 0.18)
+        t_smoke = find_word_time(["asap", "merah", "darah", "racun", "karbon", "rayleigh"], 0.40)
+        t_radar = find_word_time(["hektar", "satelit", "panas", "hotspot", "wilayah"], 0.60)
+        t_sol = find_word_time(["helikopter", "air", "padam", "sekat", "kanal", "solusi"], 0.78)
+        t_cta = find_word_time(["pendapatmu", "komentar", "sanksi", "perusak", "hukum"], 0.90)
+
+        times = sorted(list(set([0.0, t_peat, t_smoke, t_radar, t_sol, t_cta, duration])))
+
+        scenes = [
+            {
+                "start": times[0],
+                "end": times[1],
+                "mode3d": "wildfire_inferno",
+                "badge": "🔥 MISTERI KEBAKARAN HUTAN 3D",
+                "badgeColor": "#FF3B00",
+                "headline": "Kenapa Kebakaran Hutan Kalimantan Sangat Sulit Dipadamkan?",
+                "action": "hook_question",
+                "face": "surprised",
+                "sfx": "whoosh-cinematic.mp3",
+                "kpi": {
+                    "label": "SUHU TITIK API",
+                    "val": "HINGGA 900° CELSIUS",
+                    "x": 540,
+                    "y": 420,
+                },
+            },
+            {
+                "start": times[1],
+                "end": times[2],
+                "mode3d": "peatland_deep_fire",
+                "badge": "⚠️ API MERAMBAT DI BAWAH TANAH",
+                "badgeColor": "#FF5500",
+                "headline": "Api Membara 4 Meter di Bawah Permukaan Lahan Gambut!",
+                "action": "explain_science",
+                "face": "determined",
+                "sfx": "impact-bass-1.mp3",
+                "kpi": {
+                    "label": "KEDALAMAN GAMBUT",
+                    "val": "MEMBARA TANPA OKSIGEN TERBUKA",
+                    "x": 540,
+                    "y": 420,
+                },
+            },
+            {
+                "start": times[2],
+                "end": times[3],
+                "mode3d": "smoke_haze",
+                "badge": "🌫️ FENOMENA LANGIT MERAH DARAH",
+                "badgeColor": "#FF1E42",
+                "headline": "Kabut Asap Beracun Mengubah Langit Siang Jadi Merah Mencekam!",
+                "action": "predator_recoil",
+                "face": "shocked",
+                "sfx": "impact-sub.mp3",
+                "kpi": {
+                    "label": "KUALITAS UDARA",
+                    "val": "ISPU TINGKAT EKSTREM / BERACUN",
+                    "x": 540,
+                    "y": 420,
+                },
+            },
+            {
+                "start": times[3],
+                "end": times[4],
+                "mode3d": "hotspot_radar",
+                "badge": "🛰️ CITRA SATELIT TITIK PANAS",
+                "badgeColor": "#00F5D4",
+                "headline": "Ribuan Hotspot Terpantau Membakar Jutaan Hektar Ekosistem!",
+                "action": "disease_concern",
+                "face": "sad",
+                "sfx": "error.mp3",
+                "kpi": {
+                    "label": "PEMANTAUAN RADAR",
+                    "val": "RIBUAN TITIK PANAS TERDETEKSI",
+                    "x": 540,
+                    "y": 420,
+                },
+            },
+            {
+                "start": times[4],
+                "end": times[5],
+                "mode3d": "peatland_deep_fire",
+                "badge": "💧 TEKNIK RESTORASI & SEKAT KANAL",
+                "badgeColor": "#4CC9F0",
+                "headline": "Satu-satunya Solusi: Banjiri Kembali Lahan Gambut dari Bawah!",
+                "action": "solution_future",
+                "face": "smile",
+                "sfx": "chime.mp3",
+                "kpi": {
+                    "label": "METODE PEMADAMAN",
+                    "val": "SEKAT KANAL & RE-WETTING GAMBUT",
+                    "x": 540,
+                    "y": 420,
+                },
+            },
+            {
+                "start": times[5],
+                "end": round(duration + 0.3, 2),
+                "mode3d": "wildfire_inferno",
+                "badge": "💬 BAGAIMANA MENURUT KAMU?",
+                "badgeColor": "#FFE600",
+                "headline": "Sanksi Tegas Apa yang Pantas Bagi Perusak Hutan Ini? Komen di Bawah!",
+                "action": "cta_comment",
+                "face": "happy",
+                "sfx": "notification.mp3",
+                "kpi": {
+                    "label": "DISKUSI PUBLIK",
+                    "val": "TULIS DI KOLOM KOMENTAR!",
+                    "x": 540,
+                    "y": 420,
+                },
+            },
+        ]
+
+        return {
+            "duration": round(duration + 0.3, 2),
+            "title": title,
+            "words": words,
+            "scenes": scenes,
+        }
+
+    # -------------------------------------------------------------------------
+    # KATEGORI 2: BIOLOGI LAUT / UBUR-UBUR / REGENERASI / SELULAR
+    # -------------------------------------------------------------------------
     t_transdiff = find_word_time(["stres", "terluka", "menyusut", "polip", "larva"], 0.16)
     t_mystery = find_word_time(["kenapa", "lautan", "sesak", "teoritis"], 0.35)
     t_predator = find_word_time(["predator", "dimangsa", "musnah", "ikan"], 0.52)
@@ -193,7 +320,6 @@ def build_multi_scene_plan(item: dict, duration: float, words: list) -> dict:
     t_dna = find_word_time(["ilmuwan", "genetika", "dna", "telomer", "kematian"], 0.82)
     t_cta = find_word_time(["pendapatmu", "komentar", "komen", "manusia"], 0.92)
 
-    # Pastikan urutan waktu selalu menanjak
     times = sorted(list(set([0.0, t_transdiff, t_mystery, t_predator, t_disease, t_dna, t_cta, duration])))
 
     scenes = [
@@ -451,45 +577,66 @@ def send_video_to_telegram(video_path: str, item: dict) -> str:
 
     log("📤 Mengirim video Shorts 3D + Animasi Karakter ke bot Telegram...")
     caption = (
-        f"🎬 *SHORTS 3D + ANIMASI SIAP REVIEW (v{item.get('revision_version', 1)})*\n\n"
-        f"📌 *Niche:* `{item.get('niche')}`\n"
-        f"🏷️ *Judul:* {item.get('title')}\n"
-        f"🪝 *Hook:* _{item.get('hook_text')}_\n"
-        f"🎨 *Engine:* `Three.js 3D + ReelMimic Character + HyperFrames SFX + Karaoke`\n\n"
-        f"✅ *Fitur Aktif di Video Ini:*\n"
-        f"• Simulasi 3D WebGL (5 Adegan Berbeda)\n"
+        f"🎬 SHORTS 3D + ANIMASI SIAP REVIEW (v{item.get('revision_version', 1)})\n\n"
+        f"📌 Niche: {item.get('niche')}\n"
+        f"🏷️ Judul: {item.get('title')}\n"
+        f"🪝 Hook: {item.get('hook_text')}\n"
+        f"🎨 Engine: Three.js 3D + ReelMimic Character + HyperFrames SFX + Karaoke\n\n"
+        f"✅ Fitur Aktif di Video Ini:\n"
+        f"• Simulasi 3D WebGL Multi-Scene Sesuai Topik\n"
         f"• Karakter Animasi Berbicara (Lip-Sync & Ekspresi)\n"
-        f"• Subtitle Karaoke Pop Per Kata (Kuning/Cyan)\n"
-        f"• Multi-Track Sound Effects (Whoosh, Pop, Bass, Chime) + BGM\n\n"
-        f"💡 _Silakan tonton langsung di bawah ini!_"
+        f"• Subtitle Karaoke Pop Per Kata (Konsisten Hijau/Kuning)\n"
+        f"• Multi-Track Sound Effects + Ambient BGM\n\n"
+        f"💡 Silakan tonton langsung di bawah ini!"
     )
 
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendVideo"
-    cmd = [
-        "curl.exe",
-        "-s",
-        "-X",
-        "POST",
-        url,
-        "-F",
-        f"chat_id={TELEGRAM_CHANNEL_ID}",
-        "-F",
-        f"video=@{video_path}",
-        "-F",
-        f"caption={caption}",
-        "-F",
-        "parse_mode=Markdown",
-    ]
     try:
-        res = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        data = json.loads(res.stdout)
+        import requests
+        with open(video_path, "rb") as vf:
+            resp = requests.post(
+                url,
+                data={
+                    "chat_id": TELEGRAM_CHANNEL_ID,
+                    "caption": caption,
+                },
+                files={"video": vf},
+                timeout=240,
+            )
+        data = resp.json()
         msg_id = data.get("result", {}).get("message_id")
         tg_url = f"https://t.me/c/{TELEGRAM_CHANNEL_ID}/{msg_id}" if msg_id else "https://t.me/"
         log(f"✅ Video 3D sukses terkirim ke Telegram! (Message ID: {msg_id})")
         return tg_url
     except Exception as e:
-        log(f"⚠️ Gagal kirim video ke Telegram: {e}")
-        return ""
+        log(f"⚠️ Requests error ({e}), mencoba fallback curl.exe...")
+        cmd = [
+            "curl.exe",
+            "-s",
+            "--retry",
+            "3",
+            "--max-time",
+            "240",
+            "-X",
+            "POST",
+            url,
+            "-F",
+            f"chat_id={TELEGRAM_CHANNEL_ID}",
+            "-F",
+            f"video=@{video_path}",
+            "-F",
+            f"caption={caption}",
+        ]
+        try:
+            res = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            data = json.loads(res.stdout)
+            msg_id = data.get("result", {}).get("message_id")
+            tg_url = f"https://t.me/c/{TELEGRAM_CHANNEL_ID}/{msg_id}" if msg_id else "https://t.me/"
+            log(f"✅ Video 3D sukses terkirim ke Telegram! (Message ID: {msg_id})")
+            return tg_url
+        except Exception as e2:
+            log(f"⚠️ Gagal kirim video ke Telegram: {e2}")
+            return ""
 
 
 def process_one_job(force_latest: bool = False):

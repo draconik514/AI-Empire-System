@@ -78,7 +78,7 @@ try {
   ffArgs.push(
     '-c:v', 'libx264',
     '-preset', 'veryfast',
-    '-crf', '19',
+    '-crf', '23',
     '-vf', 'scale=out_range=tv',
     '-pix_fmt', 'yuv420p',
     '-color_range', 'tv',
