@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>5 Scene Sinematik 3D Karhutla Kalimantan</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body, html { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; color: #fff; }
+
+    #viewport {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #threeCanvas {
+      width: 1080px;
+      height: 1920px;
+      max-width: 100vw;
+      max-height: 100vh;
+      object-fit: contain;
+      display: block;
+    }
+
+    /* Top Timeline Scrubber Bar */
+    .top-progress {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.15);
+      z-index: 100;
+    }
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #00f5d4, #ffbe0b, #ff1744, #4cc9f0);
+      box-shadow: 0 0 12px rgba(0, 245, 212, 0.8);
+      transition: width 0.05s linear;
+    }
+
+    /* Floating Navigation Controls */
+    .nav-pills {
+      position: absolute;
+      top: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 8px;
+      z-index: 90;
+      background: rgba(12, 16, 28, 0.75);
+      backdrop-filter: blur(16px);
+      padding: 8px 14px;
+      border-radius: 40px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+    }
+    .nav-btn {
+      background: #1e2436;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #cbd5e1;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 6px 14px;
+      border-radius: 20px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .nav-btn:hover, .nav-btn.active {
+      background: #ff5500;
+      color: #fff;
+      border-color: #ffaa00;
+      box-shadow: 0 0 14px rgba(255, 85, 0, 0.5);
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+  <div class="top-progress"><div class="progress-fill" id="pBar"></div></div>
+
+  <div class="nav-pills">
+    <button class="nav-btn active" onclick="seekScene(0)">Scene 1: Drone</button>
+    <button class="nav-btn" onclick="seekScene(12)">Scene 2: Bawah Tanah</button>
+    <button class="nav-btn" onclick="seekScene(24)">Scene 3: Langit Merah</button>
+    <button class="nav-btn" onclick="seekScene(36)">Scene 4: Water Bombing</button>
+    <button class="nav-btn" onclick="seekScene(48)">Scene 5: Tunas Baru</button>
+  </div>
+
+  <div id="viewport">
+    <canvas id="threeCanvas" width="1080" height="1920"></canvas>
+  </div>
+
+  <script>
+    // =========================================================================
+    // 5-SCENE MASTER 3D CINEMATIC ENGINE (1080x1920 9:16)
+    // =========================================================================
+    const canvas = document.getElementById('threeCanvas');
+    const W = 1080, H = 1920;
+    const DURATION = 60.0; // 5 Scene @ 12 Detik
+
+    const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: false, preserveDrawingBuffer: true });
+    renderer.setSize(W, H, false);
+    renderer.setPixelRatio(1);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x050c18);
+
+    const camera = new THREE.PerspectiveCamera(48, W / H, 0.1, 350);
+
+    // Global Lighting
+    const ambLight = new THREE.AmbientLight(0xffffff, 0.9);
+    scene.add(ambLight);
+
+    const dirLight = new THREE.DirectionalLight(0xfff5eb, 1.6);
+    dirLight.position.set(20, 40, 25);
+    dirLight.castShadow = true;
+    scene.add(dirLight);
+
+    const accentLight = new THREE.PointLight(0xff4500, 0, 60);
+    scene.add(accentLight);
+
+    // Overlay 2D Context for HUD, Badges, Stat Cards & Karaoke
+    const uiCanvas = document.createElement('canvas');
+    uiCanvas.width = W;
+    uiCanvas.height = H;
+    const ctx = uiCanvas.getContext('2d');
+
+    // -------------------------------------------------------------------------
+    // UTILITIES & SPRING PHYSICS
+    // -------------------------------------------------------------------------
+    const clamp = (v, min = 0, max = 1) => Math.max(min, Math.min(max, v));
+    const lerp = (a, b, t) => a + (b - a) * clamp(t);
+    const easeOutCubic = x => 1 - Math.pow(1 - clamp(x), 3);
+    const hash = i => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+
+    function remotionSpring(t, t0, damping = 12, stiffness = 120) {
+      if (t < t0) return 0;
+      const el = t - t0;
+      const w0 = Math.sqrt(stiffness);
+      const zeta = damping / (2 * w0);
+      if (zeta < 1) {
+        const wd = w0 * Math.sqrt(1 - zeta * zeta);
+        return 1 - Math.exp(-zeta * w0 * el) * (Math.cos(wd * el) + (zeta * w0 / wd) * Math.sin(wd * el));
+      }
+      return 1 - Math.exp(-w0 * el) * (1 + w0 * el);
+    }
+
+    // -------------------------------------------------------------------------
+    // SCENE 1: DRONE AERIAL CANOPY (0s - 12s)
+    // -------------------------------------------------------------------------
+    const stage1 = new THREE.Group();
+    scene.add(stage1);
+
+    // Lush terrain + river
+    const tGeo1 = new THREE.PlaneGeometry(55, 75, 48, 48);
+    tGeo1.rotateX(-Math.PI / 2);
+    const pos1 = tGeo1.attributes.position;
+    for (let i = 0; i < pos1.count; i++) {
+      const x = pos1.getX(i);
+      const z = pos1.getZ(i);
+      let y = Math.sin(x * 0.12) * Math.cos(z * 0.1) * 2.5 + Math.sin(z * 0.05) * 1.8;
+      const riv = Math.sin(z * 0.08) * 8;
+      if (Math.abs(x - riv) < 4.5) y -= 2.2;
+      pos1.setY(i, y);
+    }
+    tGeo1.computeVertexNormals();
+    const tMesh1 = new THREE.Mesh(tGeo1, new THREE.MeshLambertMaterial({ color: 0x22381e, flatShading: true }));
+    stage1.add(tMesh1);
+
+    // 120 Green canopy trees
+    const s1Trees = [];
+    const greenPals = [0x1b4332, 0x2d6a4f, 0x40916c, 0x52b788, 0x74c69d];
+    for (let i = 0; i < 120; i++) {
+      const tx = (hash(i * 3.3) - 0.5) * 48;
+      const tz = (hash(i * 7.7) - 0.5) * 65;
+      const riv = Math.sin(tz * 0.08) * 8;
+      if (Math.abs(tx - riv) > 4) {
+        const h = 2.2 + hash(i * 5.1) * 1.5;
+        const tg = new THREE.Group();
+        tg.position.set(tx, 0.5, tz);
+
+        const trunk = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.18, 0.28, h, 5),
+          new THREE.MeshLambertMaterial({ color: 0x1f140e })
+        );
+        trunk.position.y = h / 2;
+        tg.add(trunk);
+
+        const cone = new THREE.Mesh(
+          new THREE.ConeGeometry(1.6, 2.6, 5),
+          new THREE.MeshLambertMaterial({ color: greenPals[i % greenPals.length], flatShading: true })
+        );
+        cone.position.y = h + 1.2;
+        tg.add(cone);
+
+        stage1.add(tg);
+        s1Trees.push(tg);
+      }
+    }
+
+    // River water
+    const riv1 = new THREE.Mesh(
+      new THREE.PlaneGeometry(8, 75),
+      new THREE.MeshPhongMaterial({ color: 0x0077b6, emissive: 0x002244, transparent: true, opacity: 0.85 })
+    );
+    riv1.rotateX(-Math.PI / 2);
+    riv1.position.set(0, -0.6, 0);
+    stage1.add(riv1);
+
+    // -------------------------------------------------------------------------
+    // SCENE 2: UNDERGROUND PEAT CROSS-SECTION (12s - 24s)
+    // -------------------------------------------------------------------------
+    const stage2 = new THREE.Group();
+    scene.add(stage2);
+
+    // Geological Cutaway Box (Top surface + 4-meter underground peat soil)
+    const cutawayBox = new THREE.Mesh(
+      new THREE.BoxGeometry(22, 10, 14),
+      new THREE.MeshLambertMaterial({ color: 0x1a0f08, flatShading: true })
+    );
+    cutawayBox.position.set(0, -5, 0);
+    stage2.add(cutawayBox);
+
+    // Glowing Underground Combustion Peat Chambers (Magma-like burning channels)
+    const s2Embers = [];
+    for (let e = 0; e < 24; e++) {
+      const emGeo = new THREE.DodecahedronGeometry(0.7 + hash(e * 2.1) * 0.5, 0);
+      const emMat = new THREE.MeshBasicMaterial({ color: e % 2 === 0 ? 0xff2200 : 0xff7700 });
+      const em = new THREE.Mesh(emGeo, emMat);
+      const ex = (hash(e * 4.3) - 0.5) * 16;
+      const ey = -3.2 - hash(e * 8.7) * 4.2; // 2 to 4 meters underground!
+      const ez = 7.1; // Visible on front cutaway plane
+      em.position.set(ex, ey, ez);
+      stage2.add(em);
+      s2Embers.push({ mesh: em, baseScale: 1, phase: e * 0.8 });
+    }
+
+    // Surface dying trees on cutaway top
+    for (let t = 0; t < 6; t++) {
+      const st = new THREE.Group();
+      st.position.set((t - 2.5) * 3.2, 0, 4);
+      const trk = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.3, 3, 5), new THREE.MeshLambertMaterial({ color: 0x110804 }));
+      trk.position.y = 1.5;
+      st.add(trk);
+      stage2.add(st);
+    }
+
+    // Underground Smoke Vents (Billowing up from soil cracks)
+    const s2Smoke = [];
+    for (let s = 0; s < 18; s++) {
+      const smk = new THREE.Mesh(
+        new THREE.SphereGeometry(0.5, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0x8d99ae, transparent: true, opacity: 0.5 })
+      );
+      stage2.add(smk);
+      s2Smoke.push({ mesh: smk, x: (s - 9) * 1.1, phase: s * 0.5 });
+    }
+
+    // -------------------------------------------------------------------------
+    // SCENE 3: APOCALYPTIC RED SKY & CHARRED GHOST TOWN (24s - 36s)
+    // -------------------------------------------------------------------------
+    const stage3 = new THREE.Group();
+    scene.add(stage3);
+
+    // Scorched ground
+    const s3Ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(50, 50, 16, 16),
+      new THREE.MeshLambertMaterial({ color: 0x0f0502, flatShading: true })
+    );
+    s3Ground.rotateX(-Math.PI / 2);
+    s3Ground.position.y = -2;
+    stage3.add(s3Ground);
+
+    // Dim blood-red apocalyptic sun
+    const redSun = new THREE.Mesh(
+      new THREE.SphereGeometry(3.5, 24, 24),
+      new THREE.MeshBasicMaterial({ color: 0xff0011 })
+    );
+    redSun.position.set(0, 12, -22);
+    stage3.add(redSun);
+
+    // 16 Charred skeleton trees
+    for (let c = 0; c < 16; c++) {
+      const cg = new THREE.Group();
+      const cx = (hash(c * 3.7) - 0.5) * 32;
+      const cz = (hash(c * 9.1) - 0.5) * 30;
+      cg.position.set(cx, -2, cz);
+      const trk = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.15, 0.3, 5, 5),
+        new THREE.MeshLambertMaterial({ color: 0x080402 })
+      );
+      trk.position.y = 2.5;
+      cg.add(trk);
+      stage3.add(cg);
+    }
+
+    // 250 Ash Flakes drifting in the air
+    const ashGeo = new THREE.BufferGeometry();
+    const ashPos = new Float32Array(250 * 3);
+    for (let a = 0; a < 250; a++) {
+      ashPos[a * 3] = (hash(a * 2.3) - 0.5) * 36;
+      ashPos[a * 3 + 1] = hash(a * 7.1) * 22;
+      ashPos[a * 3 + 2] = (hash(a * 11.7) - 0.5) * 36;
+    }
+    ashGeo.setAttribute('position', new THREE.BufferAttribute(ashPos, 3));
+    const ashPoints = new THREE.Points(ashGeo, new THREE.PointsMaterial({ color: 0x94a3b8, size: 0.45, transparent: true, opacity: 0.85 }));
+    stage3.add(ashPoints);
+
+    // -------------------------------------------------------------------------
+    // SCENE 4: WATER BOMBING & CANAL BLOCKING (36s - 48s)
+    // -------------------------------------------------------------------------
+    const stage4 = new THREE.Group();
+    scene.add(stage4);
+
+    // Wooden Canal Dam (Sekat Kanal)
+    const damGeo = new THREE.BoxGeometry(14, 3.5, 2.2);
+    const damMat = new THREE.MeshLambertMaterial({ color: 0x4a3525 });
+    const dam = new THREE.Mesh(damGeo, damMat);
+    dam.position.set(0, 0, 0);
+    stage4.add(dam);
+
+    // Rising Water Table behind the dam
+    const waterTable = new THREE.Mesh(
+      new THREE.PlaneGeometry(28, 28),
+      new THREE.MeshPhongMaterial({ color: 0x00b4d8, transparent: true, opacity: 0.75 })
+    );
+    waterTable.rotateX(-Math.PI / 2);
+    waterTable.position.set(0, 0.4, 10);
+    stage4.add(waterTable);
+
+    // 3D Firefighting Helicopter (Low-Poly Mi-8 / Sikorsky silhouette)
+    const heli = new THREE.Group();
+    const hBody = new THREE.Mesh(new THREE.BoxGeometry(3.8, 1.8, 1.8), new THREE.MeshLambertMaterial({ color: 0xff3b00 }));
+    heli.add(hBody);
+    const hTail = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.5, 0.5), new THREE.MeshLambertMaterial({ color: 0xff3b00 }));
+    hTail.position.set(-3.2, 0.4, 0);
+    heli.add(hTail);
+    const hRotor = new THREE.Mesh(new THREE.CylinderGeometry(4.5, 4.5, 0.08, 12), new THREE.MeshBasicMaterial({ color: 0x222222, transparent: true, opacity: 0.6 }));
+    hRotor.position.y = 1.2;
+    heli.add(hRotor);
+    heli.position.set(0, 16, 2);
+    stage4.add(heli);
+
+    // Massive Water Cascade Particles
+    const dropGeo = new THREE.BufferGeometry();
+    const dropPos = new Float32Array(500 * 3);
+    for (let d = 0; d < 500; d++) {
+      dropPos[d * 3] = (hash(d * 3.1) - 0.5) * 6;
+      dropPos[d * 3 + 1] = 15 - hash(d * 9.7) * 16;
+      dropPos[d * 3 + 2] = (hash(d * 5.5) - 0.5) * 6;
+    }
+    dropGeo.setAttribute('position', new THREE.BufferAttribute(dropPos, 3));
+    const dropPoints = new THREE.Points(dropGeo, new THREE.PointsMaterial({ color: 0x90e0ef, size: 0.6, transparent: true, opacity: 0.8 }));
+    stage4.add(dropPoints);
+
+    // -------------------------------------------------------------------------
+    // SCENE 5: ECOLOGICAL REBIRTH & DISCUSSION CTA (48s - 60s)
+    // -------------------------------------------------------------------------
+    const stage5 = new THREE.Group();
+    scene.add(stage5);
+
+    // Dark charcoal ground
+    const s5Ground = new THREE.Mesh(
+      new THREE.CylinderGeometry(8, 8.5, 1, 24),
+      new THREE.MeshLambertMaterial({ color: 0x150b06 })
+    );
+    s5Ground.position.y = -0.5;
+    stage5.add(s5Ground);
+
+    // Fresh Green Sprout (Macro seedling)
+    const sprout = new THREE.Group();
+    sprout.position.set(0, 0, 0);
+    const stem = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.08, 0.12, 1.8, 8),
+      new THREE.MeshLambertMaterial({ color: 0x52b788 })
+    );
+    stem.position.y = 0.9;
+    sprout.add(stem);
+
+    const leaf1 = new THREE.Mesh(
+      new THREE.ConeGeometry(0.45, 1.2, 5),
+      new THREE.MeshLambertMaterial({ color: 0x74c69d })
+    );
+    leaf1.position.set(0.4, 1.7, 0);
+    leaf1.rotation.z = -Math.PI / 3.8;
+    sprout.add(leaf1);
+
+    const leaf2 = new THREE.Mesh(
+      new THREE.ConeGeometry(0.45, 1.2, 5),
+      new THREE.MeshLambertMaterial({ color: 0x40916c })
+    );
+    leaf2.position.set(-0.4, 1.6, 0);
+    leaf2.rotation.z = Math.PI / 3.8;
+    sprout.add(leaf2);
+
+    stage5.add(sprout);
+
+    // Golden Sunlight Rays
+    const sunBeam = new THREE.Mesh(
+      new THREE.CylinderGeometry(4.2, 0.4, 26, 16),
+      new THREE.MeshBasicMaterial({ color: 0xffe600, transparent: true, opacity: 0.22, side: THREE.DoubleSide })
+    );
+    sunBeam.position.set(2, 10, -4);
+    sunBeam.rotation.z = Math.PI / 8;
+    stage5.add(sunBeam);
+
+    // -------------------------------------------------------------------------
+    // SCRIPT NARASI & 5-SCENE TIMELINE DEFINITION
+    // -------------------------------------------------------------------------
+    const SCENES = [
+      {
+        id: 1, start: 0, end: 12,
+        badge: "🛰️ DRONE RECONNAISSANCE 3D",
+        badgeCol: "#00F5D4",
+        headline: "Kenapa Kebakaran Hutan Kalimantan Sangat Mustahil Dipadamkan?",
+        sub: "Hutan Kalimantan bukan hutan biasa. Di bawah permukaannya tersimpan rahasia jutaan ton bahan bakar purba!",
+        kpi: { title: "KOORDINAT BORNEO", val: "LAT: 0°58'S | LON: 114°28'E", col: "#00F5D4" }
+      },
+      {
+        id: 2, start: 12, end: 24,
+        badge: "🔬 PENAMPANG BAWAH TANAH (CUTAWAY)",
+        badgeCol: "#FF5500",
+        headline: "Apinya Tidak Menyala di Pohon, Tapi 4 Meter di Bawah Tanah!",
+        sub: "Sisa vegetasi ribuan tahun bertindak layaknya briket batu bara alami yang membara tanpa henti!",
+        kpi: { title: "KEDALAMAN BARA API", val: "-4 METER | SUHU 900°C", col: "#FF3B00" }
+      },
+      {
+        id: 3, start: 24, end: 36,
+        badge: "🌫️ FENOMENA LANGIT MERAH DARAH",
+        badgeCol: "#FF1744",
+        headline: "Partikel Debu Mikro Mengubah Siang Hari Menjadi Merah Mencekam!",
+        sub: "Hamburan Rayleigh ekstrem membiaskan cahaya matahari, menelan kota dalam kabut racun karbon monoksida!",
+        kpi: { title: "KUALITAS UDARA (ISPU)", val: "603 BERBAHAYA EKSTREM", col: "#FF1744" }
+      },
+      {
+        id: 4, start: 36, end: 48,
+        badge: "💧 OPERASI WATER BOMBING & SEKAT KANAL",
+        badgeCol: "#4CC9F0",
+        headline: "Satu-satunya Solusi: Banjiri Lahan Gambut dari Bawah Tanah!",
+        sub: "Helikopter menyiram dari atas, sementara sekat kanal menaikkan air tanah membasahi bara dari dalam!",
+        kpi: { title: "METODE RESTORASI", val: "SEKAT KANAL & RE-WETTING", col: "#4CC9F0" }
+      },
+      {
+        id: 5, start: 48, end: 60,
+        badge: "💬 DISKUSI SAINS & LINGKUNGAN",
+        badgeCol: "#FFE600",
+        headline: "Menurut Kamu, Sanksi Tegas Apa yang Pantas Bagi Pembakar Hutan?",
+        sub: "Tulis pendapat dan analisismu di kolom komentar di bawah!",
+        kpi: { title: "AJAKAN DISKUSI", val: "TULIS PENDAPATMU DI KOMENTAR 👇", col: "#FFE600" }
+      }
+    ];
+
+    // -------------------------------------------------------------------------
+    // DETERMINISTIC RENDER FUNCTION (Render at Exact Time t)
+    // -------------------------------------------------------------------------
+    window.renderAtTime = function (t) {
+      t = clamp(t, 0, DURATION);
+
+      // Identify Current Scene
+      let sIdx = 0;
+      for (let i = 0; i < SCENES.length; i++) {
+        if (t >= SCENES[i].start) sIdx = i;
+      }
+      const curS = SCENES[sIdx];
+      const lt = t - curS.start; // Local time in scene (0..12s)
+
+      // Toggle Active 3D Stage
+      stage1.visible = sIdx === 0;
+      stage2.visible = sIdx === 1;
+      stage3.visible = sIdx === 2;
+      stage4.visible = sIdx === 3;
+      stage5.visible = sIdx === 4;
+
+      // 1. STAGE ANIMATIONS & CAMERA CHOREOGRAPHY
+      if (sIdx === 0) {
+        // Drone flying smoothly over forest canopy
+        scene.background.setHex(0x38bdf8);
+        scene.fog = new THREE.FogExp2(0x38bdf8, 0.015);
+        dirLight.intensity = 1.8;
+        dirLight.color.setHex(0xfff5eb);
+
+        const camProg = lt / 12.0;
+        camera.position.set(Math.sin(lt * 0.25) * 6, 14 - camProg * 3, 35 - camProg * 25);
+        camera.lookAt(0, 1.5, -camProg * 25 - 10);
+      } else if (sIdx === 1) {
+        // Underground cutaway view
+        scene.background.setHex(0x0e0704);
+        scene.fog = new THREE.FogExp2(0x0e0704, 0.025);
+        dirLight.intensity = 0.9;
+        dirLight.color.setHex(0xff7733);
+
+        // Pulsing subterranean embers
+        for (let e = 0; e < s2Embers.length; e++) {
+          const emb = s2Embers[e];
+          const sc = emb.baseScale * (1 + 0.25 * Math.sin(t * 8 + emb.phase));
+          emb.mesh.scale.setScalar(sc);
+        }
+        // Rising smoke fissures
+        for (let s = 0; s < s2Smoke.length; s++) {
+          const sm = s2Smoke[s];
+          const spProg = ((lt * 1.5 + sm.phase) % 1);
+          sm.mesh.position.set(sm.x, spProg * 4.5, 7.1);
+          sm.mesh.scale.setScalar(0.4 + spProg * 1.4);
+        }
+
+        const camProg = lt / 12.0;
+        camera.position.set(Math.sin(lt * 0.3) * 4, -4.5 + Math.sin(lt * 0.2) * 1.5, 20 - camProg * 4);
+        camera.lookAt(0, -5, 0);
+      } else if (sIdx === 2) {
+        // Apocalyptic Red Sky & Toxic Smog
+        scene.background.setHex(0x280502);
+        scene.fog = new THREE.FogExp2(0x280502, 0.042);
+        dirLight.intensity = 0.4;
+        dirLight.color.setHex(0xff1744);
+
+        // Ash snowfall
+        const aArr = ashPoints.geometry.attributes.position.array;
+        for (let a = 0; a < 250; a++) {
+          aArr[a * 3 + 1] -= 0.12;
+          if (aArr[a * 3 + 1] < -2) aArr[a * 3 + 1] = 20;
+          aArr[a * 3] += Math.sin(t * 2 + a) * 0.02;
+        }
+        ashPoints.geometry.attributes.position.needsUpdate = true;
+
+        // Subtle camera shake simulation
+        const shkX = Math.sin(t * 14) * 0.15;
+        const shkY = Math.cos(t * 11) * 0.12;
+        camera.position.set(shkX, 3.5 + shkY, 22 - lt * 0.8);
+        camera.lookAt(0, 4, -10);
+      } else if (sIdx === 3) {
+        // Water bombing helicopter & wooden canal dam
+        scene.background.setHex(0x1e3a5f);
+        scene.fog = new THREE.FogExp2(0x1e3a5f, 0.02);
+        dirLight.intensity = 1.6;
+        dirLight.color.setHex(0xffffff);
+
+        // Helicopter flight & rotor
+        hRotor.rotation.y = t * 24;
+        heli.position.x = Math.sin(lt * 0.8) * 8;
+        heli.position.z = Math.cos(lt * 0.8) * 4;
+
+        // Water cascade drops falling
+        const dArr = dropPoints.geometry.attributes.position.array;
+        for (let d = 0; d < 500; d++) {
+          dArr[d * 3 + 1] -= 0.85;
+          if (dArr[d * 3 + 1] < 0) {
+            dArr[d * 3 + 1] = 16;
+            dArr[d * 3] = heli.position.x + (hash(d * 3.3) - 0.5) * 5;
+            dArr[d * 3 + 2] = heli.position.z + (hash(d * 7.7) - 0.5) * 5;
+          }
+        }
+        dropPoints.geometry.attributes.position.needsUpdate = true;
+
+        // Canal water table swelling
+        waterTable.position.y = 0.4 + Math.min(1.8, lt * 0.18);
+
+        camera.position.set(10, 8, 22);
+        camera.lookAt(0, 2, 0);
+      } else if (sIdx === 4) {
+        // Ecological Rebirth Sprout & Golden Sunbeams
+        scene.background.setHex(0x061a12);
+        scene.fog = new THREE.FogExp2(0x061a12, 0.022);
+        dirLight.intensity = 1.9;
+        dirLight.color.setHex(0xffe600);
+
+        // Sprout breathing animation
+        const sprScale = easeOutCubic(clamp(lt / 4, 0, 1));
+        sprout.scale.setScalar(sprScale * (1 + Math.sin(t * 3) * 0.04));
+
+        sunBeam.rotation.y = t * 0.2;
+
+        const camProg = lt / 12.0;
+        camera.position.set(Math.sin(lt * 0.4) * 2, 2.2 - camProg * 0.8, 6.5 - camProg * 1.5);
+        camera.lookAt(0, 1.2, 0);
+      }
+
+      // Render 3D Scene
+      renderer.render(scene, camera);
+
+      // -----------------------------------------------------------------------
+      // 2. DRAW 2D MOTION GRAPHICS OVERLAY
+      // -----------------------------------------------------------------------
+      ctx.clearRect(0, 0, W, H);
+
+      // Scene Cut Transition Flash / Wipe
+      if (lt < 0.35) {
+        const fOp = (1 - lt / 0.35);
+        ctx.fillStyle = sIdx === 2 ? `rgba(255, 23, 68, ${fOp * 0.75})` : `rgba(0, 245, 212, ${fOp * 0.6})`;
+        ctx.fillRect(0, 0, W, H);
+      }
+
+      // Top Progress Bar
+      const prog = clamp(t / DURATION);
+      document.getElementById('pBar').style.width = (prog * 100) + '%';
+
+      // Remotion Spring In for UI elements
+      const badgeSpring = remotionSpring(lt, 0.15, 12, 140);
+      const cardSpring = remotionSpring(lt, 0.35, 11, 130);
+      const subSpring = remotionSpring(lt, 0.25, 13, 120);
+
+      // Top Scene Badge
+      ctx.save();
+      ctx.translate(W / 2, 130);
+      ctx.scale(badgeSpring, badgeSpring);
+      ctx.fillStyle = "rgba(10, 14, 28, 0.88)";
+      ctx.strokeStyle = curS.badgeCol;
+      ctx.lineWidth = 3.5;
+      ctx.shadowColor = curS.badgeCol;
+      ctx.shadowBlur = 18;
+      ctx.beginPath();
+      ctx.roundRect(-240, -28, 480, 56, 28);
+      ctx.fill();
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "900 22px 'Segoe UI', sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(curS.badge, 0, 1);
+      ctx.restore();
+
+      // KPI Stat Glass Card (Below Badge)
+      if (curS.kpi) {
+        ctx.save();
+        ctx.translate(W / 2, 280);
+        ctx.scale(cardSpring, cardSpring);
+
+        const cw = 680, ch = 130;
+        ctx.fillStyle = sIdx === 2 ? "rgba(45, 10, 14, 0.92)" : "rgba(10, 16, 32, 0.9)";
+        ctx.strokeStyle = curS.kpi.col;
+        ctx.lineWidth = 3;
+        ctx.shadowColor = curS.kpi.col;
+        ctx.shadowBlur = 24;
+        ctx.beginPath();
+        ctx.roundRect(-cw / 2, -ch / 2, cw, ch, 24);
+        ctx.fill();
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        // Label
+        ctx.fillStyle = "#94a3b8";
+        ctx.font = "800 16px 'Segoe UI', sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(curS.kpi.title, 0, -28);
+
+        // Value
+        ctx.fillStyle = curS.kpi.col;
+        ctx.font = "900 32px 'Arial Black', sans-serif";
+        ctx.fillText(curS.kpi.val, 0, 18);
+        ctx.restore();
+      }
+
+      // Bottom Subtitle & Headline Card (1340px to 1750px)
+      ctx.save();
+      ctx.translate(W / 2, 1540);
+      ctx.scale(subSpring, subSpring);
+
+      const hw = 960, hh = 290;
+      ctx.fillStyle = "rgba(8, 12, 24, 0.92)";
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.18)";
+      ctx.lineWidth = 2.5;
+      ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
+      ctx.shadowBlur = 32;
+      ctx.beginPath();
+      ctx.roundRect(-hw / 2, -hh / 2, hw, hh, 32);
+      ctx.fill();
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // Headline Text (Bold Gold / Cyan)
+      ctx.fillStyle = curS.badgeCol;
+      ctx.font = "900 34px 'Segoe UI', sans-serif";
+      ctx.textAlign = "center";
+      wrapText(ctx, curS.headline, 0, -65, 880, 44);
+
+      // Narrative Explainer Text
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "500 24px 'Segoe UI', sans-serif";
+      wrapText(ctx, curS.sub, 0, 45, 880, 36);
+
+      ctx.restore();
+
+      // Blit UI overlay onto Three.js WebGL canvas
+      const gl = renderer.getContext();
+      // Use 2D composite over WebGL canvas in browser
+    };
+
+    function wrapText(c, text, x, y, maxW, lineH) {
+      const words = String(text || '').split(' ');
+      let line = '';
+      const lines = [];
+      for (const w of words) {
+        const test = line ? line + ' ' + w : w;
+        if (c.measureText(test).width > maxW && line) {
+          lines.push(line);
+          line = w;
+        } else {
+          line = test;
+        }
+      }
+      if (line) lines.push(line);
+      const startY = y - ((lines.length - 1) * lineH) / 2;
+      for (let i = 0; i < lines.length; i++) {
+        c.fillText(lines[i], x, startY + i * lineH);
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // COMPOSITE RENDER FOR PUPPETEER EXPORT
+    // -------------------------------------------------------------------------
+    const finalExportCanvas = document.createElement('canvas');
+    finalExportCanvas.width = W;
+    finalExportCanvas.height = H;
+    const finalExportCtx = finalExportCanvas.getContext('2d');
+
+    window.renderAt = function (time, mime = 'image/jpeg', quality = 0.90) {
+      window.renderAtTime(time);
+      finalExportCtx.drawImage(canvas, 0, 0);
+      finalExportCtx.drawImage(uiCanvas, 0, 0);
+      return finalExportCanvas.toDataURL(mime, quality);
+    };
+
+    window.ready = true;
+
+    // -------------------------------------------------------------------------
+    // BROWSER INTERACTIVE ANIMATION LOOP
+    // -------------------------------------------------------------------------
+    let simTime = 0;
+    let isLivePlaying = true;
+    let lastTick = performance.now();
+
+    function loop(now) {
+      requestAnimationFrame(loop);
+      const dt = Math.min((now - lastTick) / 1000, 0.1);
+      lastTick = now;
+
+      if (isLivePlaying) {
+        simTime += dt;
+        if (simTime >= DURATION) simTime = 0;
+      }
+
+      window.renderAtTime(simTime);
+
+      // Blit UI onto main canvas view in live browser
+      const main2D = canvas.getContext('2d');
+      // Three.js manages canvas WebGL context, so we draw overlay on a top canvas or overlay container
+    }
+
+    // Attach overlay canvas on top in DOM for live preview
+    uiCanvas.style.position = 'absolute';
+    uiCanvas.style.top = '0';
+    uiCanvas.style.left = '0';
+    uiCanvas.style.width = '100%';
+    uiCanvas.style.height = '100%';
+    uiCanvas.style.objectFit = 'contain';
+    uiCanvas.style.pointerEvents = 'none';
+    document.getElementById('viewport').appendChild(uiCanvas);
+
+    requestAnimationFrame(loop);
+
+    window.seekScene = function (targetTime) {
+      simTime = targetTime;
+      const btns = document.querySelectorAll('.nav-btn');
+      btns.forEach(b => b.classList.remove('active'));
+      const activeIdx = Math.floor(targetTime / 12);
+      if (btns[activeIdx]) btns[activeIdx].classList.add('active');
+    };
+  </script>
+</body>
+</html>
