@@ -4,16 +4,16 @@ import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const niche: "Edukasi_CalonSarjana" | "Islamic" | "Gaming_Roblox_Minecraft" =
-      body.niche || "Edukasi_CalonSarjana";
+    const niche: "Edukasi_CalonSarjana" | "Islamic" =
+      body.niche === "Islamic" ? "Islamic" : "Edukasi_CalonSarjana";
     const customTopic: string = body.custom_topic || "";
+    const sourceChannel: string = body.source_channel || "YNTV";
+    const durationTarget: string = body.duration_target || "1.5m";
     const referenceUrl: string =
       body.reference_url ||
       (niche === "Edukasi_CalonSarjana"
         ? "https://www.youtube.com/@CalonSarjanaOfficial"
-        : niche === "Islamic"
-        ? "local://referensi-islami-400subs-master.mp4"
-        : "https://www.youtube.com/shorts/roblox-minecraft-ref");
+        : "https://www.youtube.com/@islamic-short-513");
 
     const geminiKey = process.env.GEMINI_API_KEY;
     const groqKey = process.env.GROQ_API_KEY;
@@ -28,56 +28,85 @@ export async function POST(req: NextRequest) {
     let promptUser = "";
 
     if (niche === "Edukasi_CalonSarjana") {
-      promptSystem = `Kamu adalah Head Scriptwriter spesialis YouTube Shorts Edukasi & Fakta Unik bergaya "Calon Sarjana".
-GAYA KHAS CALON SARJANA:
-1. HOOK MEMUKAU (3 Detik Pertama): Pertanyaan mengejutkan atau perbandingan ekstrem yang membuat penonton berhenti scrolling.
-2. PACING CEPAT: 3 Poin Fakta gila/misterius yang jarang diketahui orang.
-3. VISUAL CUES: Berikan instruksi visual di setiap poin (misal: [Motion Text Angka], [SFX Whoosh], [Zoom Cepat]).
-4. DURASI: Sekitar 50-70 detik dibaca santai tapi antusias.
-5. PENUTUP INTERAKTIF: Lempar 1 pertanyaan seru di akhir untuk memancing ribuan komentar.
+      promptSystem = `Kamu adalah Head Scriptwriter & Video Producer spesialis YouTube Shorts Edukasi & Sains Viral bergaya "Calon Sarjana".
+TUGAS UTAMA:
+Hasilkan naskah lengkap BESERTA BREAKDOWN 5 SCENE DETAIL yang terstruktur dari detik awal sampai akhir agar video berpotensi viral.
+TARGET DURASI: ${durationTarget} (antara 60 hingga 120 detik).
 
-Format JSON Output Wajib:
+FORMAT JSON OUTPUT WAJIB:
 {
   "title": "Judul Shorts yang bombastis dan bikin penasaran (Maks 60 Karakter)",
   "hook_text": "Kalimat pembuka 3 detik pertama",
-  "full_script": "Naskah narasi lengkap tanpa tanda kurung visual (khusus untuk dibaca narator)",
-  "visual_script": "Naskah lengkap beserta catatan instruksi visual dan SFX [Whoosh/Pop/Suspense]",
-  "style_preset": "Calon Sarjana Pro (Fast Cut 2.5s, Motion Data, SFX Whoosh)",
-  "sfx_and_motion_notes": "Transisi whoosh tiap 2.5 detik, teks angka membesar, audio latar misteri/fakta"
+  "target_duration_seconds": 90,
+  "full_script": "Naskah narasi lengkap khusus untuk dibaca narator tanpa keterangan teknis",
+  "scenes": [
+    {
+      "scene_num": 1,
+      "time_range": "00:00 - 00:15",
+      "visual_direction": "Instruksi visual footage / drone angle / objek pembuka",
+      "narration": "Teks naskah yang dibacakan pada scene ini",
+      "motion_fx": "Instruksi Remotion / motion text / HUD animasi",
+      "sound_fx": "Cinematic whoosh / impact bass / risers"
+    },
+    {
+      "scene_num": 2,
+      "time_range": "00:15 - 00:35",
+      "visual_direction": "Visual footage / cutaway penampang / objek utama",
+      "narration": "Teks narasi poin pertama fakta sains mengejutkan",
+      "motion_fx": "Data card / zoom tracking / diagram alur",
+      "sound_fx": "Glitch / alert / whoosh"
+    },
+    {
+      "scene_num": 3,
+      "time_range": "00:35 - 00:55",
+      "visual_direction": "Visual footage / makro shot / perbandingan ekstrem",
+      "narration": "Teks narasi poin kedua fakta mencengangkan",
+      "motion_fx": "Warning banner / counter angka count-up",
+      "sound_fx": "Sub bass drop / dramatic hit"
+    },
+    {
+      "scene_num": 4,
+      "time_range": "00:55 - 01:15",
+      "visual_direction": "Visual footage solusi / riset ilmiah / aksi pembuktian",
+      "narration": "Teks narasi poin ketiga penjelasan ilmiah",
+      "motion_fx": "Split screen / spotlight / kinetic text",
+      "sound_fx": "Chime / transition wipe"
+    },
+    {
+      "scene_num": 5,
+      "time_range": "01:15 - 01:30",
+      "visual_direction": "Visual footage penutup / close-up dramatis",
+      "narration": "Teks pertanyaan penutup interaktif pemancing komentar",
+      "motion_fx": "CTA comment button / subscribe motion pill",
+      "sound_fx": "Notification pop / closing riser"
+    }
+  ],
+  "style_preset": "Calon Sarjana Pro (5 Distinct Scenes + Remotion Kinetic Motion)",
+  "sfx_and_motion_notes": "Multi-scene cutaway 2.5s, Remotion spring cards, Karaoke subtitle hijau neon/kuning emas"
 }`;
       promptUser = customTopic
-        ? `Buat 1 naskah Shorts Edukasi Calon Sarjana dengan topik spesifik: "${customTopic}".`
-        : `Tentukan sendiri 1 topik fakta unik/sains/misteri dunia yang paling mencengangkan, langka, dan viral hari ini. Buat naskah Shorts Calon Sarjana lengkap!`;
-    } else if (niche === "Islamic") {
-      promptSystem = `Kamu adalah Scriptwriter spesialis konten Islami penyejuk hati & doa mustajab (Target 400 -> 1.000 Subs).
-GAYA KHAS: Hangat, menyentuh, penuh adab, dalil shahih/hikmah yang menggetarkan hati.
-Format JSON Output Wajib:
-{
-  "title": "Judul Islami penyejuk hati",
-  "hook_text": "Kalimat pembuka menyentuh",
-  "full_script": "Naskah narasi lengkap",
-  "visual_script": "Naskah + petunjuk visual tenang/warm grading",
-  "style_preset": "Warm Islamic Gold (Karaoke Subtitle Emas, BGM Ducking)",
-  "sfx_and_motion_notes": "Font karaoke emas estetik, transisi lembut, BGM sholawat instrumental auto-ducking"
-}`;
-      promptUser = customTopic
-        ? `Buat naskah Islami dengan tema: "${customTopic}".`
-        : `Tentukan 1 amalan ringan atau doa mustajab penyejuk hati yang sangat dibutuhkan umat hari ini.`;
+        ? `Buat 1 naskah Shorts Edukasi Calon Sarjana 5 Scene lengkap dengan topik spesifik: "${customTopic}". Target durasi: ${durationTarget}.`
+        : `Tentukan sendiri 1 topik fakta unik/sains/misteri dunia yang paling mencengangkan, langka, dan viral hari ini. Buat naskah Shorts Calon Sarjana 5 Scene lengkap! Target durasi: ${durationTarget}.`;
     } else {
-      promptSystem = `Kamu adalah Scriptwriter konten anak gaming (Roblox & Minecraft).
-GAYA: Ceria, membal, seru, misteri map rahasia.
+      promptSystem = `Kamu adalah Scriptwriter & Video Editor spesialis YouTube Shorts Islamic untuk channel @islamic-short-513 (Target 400 -> 10.000 Subs).
+GAYA KHAS: Format ala Z-Code / CapCut 4K HD:
+1. Cover Box Kuning tebal dengan tulisan bold hitam bergaris tepi putih (Contoh judul channel: "Ternyata Ustad Felix Bisa Sombong, Tapi Sombong Nya Kek Gini", "Rezeki itu Ujian - yang Ini Berat").
+2. Subtitle tebal per frasa di tengah bawah: kombinasi warna Kuning tebal, Merah tebal, dan Putih tebal dengan outline hitam tegas.
+3. Branding Source di bawah subtitle: [🔴 YouTube Logo] + ${sourceChannel}.
+4. Filter HD 4K (kontras warm cinematic, penajaman tinggi).
+
 Format JSON Output Wajib:
 {
-  "title": "Judul Gaming Anak",
-  "hook_text": "Hook seru",
-  "full_script": "Naskah narasi",
-  "visual_script": "Naskah + petunjuk bouncy visual",
-  "style_preset": "Kids Bouncy Pop-Up",
-  "sfx_and_motion_notes": "Subtitle membal, zoom shake, SFX meme ramah anak"
+  "title": "Judul Shorts Islami yang menggetarkan hati (Box Kuning)",
+  "hook_text": "Kalimat pembuka 3 detik pertama",
+  "full_script": "Naskah narasi lengkap penyejuk hati",
+  "source_channel": "${sourceChannel}",
+  "style_preset": "Islamic Z-Code Style (Portrait 9:16 Crop, Subtitle Kuning/Merah, Watermark [YT] ${sourceChannel}, Filter HD 4K)",
+  "sfx_and_motion_notes": "Cover box kuning, subtitle bold kuning/merah, logo YT ${sourceChannel} di bawah subtitle, filter HD cinematic"
 }`;
       promptUser = customTopic
-        ? `Buat naskah Roblox/Minecraft: "${customTopic}".`
-        : `Buat 1 trik/rahasia seru di map Roblox Brookhaven atau Minecraft yang viral hari ini.`;
+        ? `Buat naskah dan metadata Shorts Islami dengan tema: "${customTopic}". Sumber kanal: "${sourceChannel}".`
+        : `Tentukan 1 kutipan atau nasehat penyejuk hati tentang ujian hidup, sabar, atau rezeki dari Ustadz Felix Siauw / ustadz terpercaya. Sumber kanal: "${sourceChannel}".`;
     }
 
     let parsed: Record<string, string> = {};
@@ -193,15 +222,17 @@ Format JSON Output Wajib:
 
       return NextResponse.json({
         ok: true,
-        item: data || item,
-        message: "Naskah berhasil diriset & dijadwalkan untuk render laptop!",
+        item: { ...(data || item), scenes: parsed.scenes, target_duration_seconds: parsed.target_duration_seconds },
+        parsed_data: parsed,
+        message: "Naskah & 5 Scene Breakdown berhasil diriset!",
       });
     }
 
     return NextResponse.json({
       ok: true,
-      item,
-      message: "Naskah berhasil dibuat (preview mode).",
+      item: { ...item, scenes: parsed.scenes, target_duration_seconds: parsed.target_duration_seconds },
+      parsed_data: parsed,
+      message: "Naskah & 5 Scene Breakdown berhasil dibuat (preview mode).",
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Internal error";

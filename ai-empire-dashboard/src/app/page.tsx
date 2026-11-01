@@ -4,1166 +4,1142 @@ import React, { useState, useEffect } from "react";
 import {
   MessageSquare,
   Video,
-  Briefcase,
-  Send,
-  Plus,
-  CheckCircle2,
+  Moon,
+  GraduationCap,
+  Sparkles,
   RefreshCw,
-  Sliders,
   ExternalLink,
   Layers,
   Terminal,
-  Sparkles,
   Bell,
-  FileText,
-  CornerDownRight,
+  CheckCircle2,
+  Clock,
+  UploadCloud,
+  FileVideo,
+  Search,
+  Filter,
+  Sliders,
+  Play,
+  ArrowRight,
+  ShieldCheck,
+  Cpu,
+  Send,
+  Zap,
 } from "lucide-react";
 import {
   supabase,
   isSupabaseConfigured,
-  INITIAL_OFFICE_TASKS,
   INITIAL_SOCIAL_CHATS,
   INITIAL_SHORTS_QUEUE,
-  INITIAL_AGENT_JOBS,
-  OfficeTask,
   SocialChatLead,
   ShortsItem,
-  AgentJob,
 } from "@/lib/supabase";
 
-export default function CommandCenterDashboard() {
+export default function AIEmpireDashboard() {
   const [activeTab, setActiveTab] = useState<
-    "responder" | "shorts" | "office" | "system"
-  >("responder");
+    "islamic" | "edukasi" | "responder" | "settings"
+  >("islamic");
 
-  const [officeTasks, setOfficeTasks] =
-    useState<OfficeTask[]>(INITIAL_OFFICE_TASKS);
   const [socialChats, setSocialChats] =
     useState<SocialChatLead[]>(INITIAL_SOCIAL_CHATS);
   const [shortsQueue, setShortsQueue] =
     useState<ShortsItem[]>(INITIAL_SHORTS_QUEUE);
-  const [agentJobs, setAgentJobs] = useState<AgentJob[]>(INITIAL_AGENT_JOBS);
-  const [selectedNiche, setSelectedNiche] = useState<string>("Edukasi_CalonSarjana");
   const [toast, setToast] = useState<string | null>(null);
 
-  // Shorts Auto-Pilot states
-  const [isGeneratingShorts, setIsGeneratingShorts] = useState(false);
-  const [edukasiTopicInput, setEdukasiTopicInput] = useState("");
-  const [edukasiRefUrl, setEdukasiRefUrl] = useState(
-    "https://www.youtube.com/@CalonSarjanaOfficial"
+  // ---------------------------------------------------------------------------
+  // TAB 1: SHORTS ISLAMIC (Z-CODE AUTOMATED EDITOR)
+  // ---------------------------------------------------------------------------
+  const [islamicTitle, setIslamicTitle] = useState(
+    "Ternyata Ustad Felix Bisa Sombong, Tapi Sombong Nya Kek Gini"
   );
+  const [islamicSourceYt, setIslamicSourceYt] = useState("YNTV");
+  const [islamicVideoFile, setIslamicVideoFile] = useState<File | null>(null);
+  const [isProcessingIslamic, setIsProcessingIslamic] = useState(false);
+  const [optSmartCrop, setOptSmartCrop] = useState(true);
+  const [optCapcutHd, setOptCapcutHd] = useState(true);
+  const [optBoldSubtitle, setOptBoldSubtitle] = useState(true);
 
-  // Social Auto-Responder states
-  const [sopInstruction, setSopInstruction] = useState(
-    "Jawab sopan & ramah dalam <2 detik. Informasikan kisaran harga dasar, tanyakan detail kebutuhan/nomor WhatsApp, dan beritahu bahwa notifikasi prioritas sudah dikirim ke Telegram Owner."
-  );
-  const [simPlatform, setSimPlatform] = useState<"Instagram" | "TikTok">(
-    "Instagram"
-  );
-  const [simHandle, setSimHandle] = useState("");
-  const [simMessage, setSimMessage] = useState("");
-  const [isSendingChat, setIsSendingChat] = useState(false);
+  // ---------------------------------------------------------------------------
+  // TAB 2: SHORTS EDUKASI (AI SCRIPT & 5-SCENE BREAKDOWN GENERATOR)
+  // ---------------------------------------------------------------------------
+  const [edukasiTopic, setEdukasiTopic] = useState("");
+  const [edukasiDuration, setEdukasiDuration] = useState<"1m" | "1.5m" | "2m">("1.5m");
+  const [isGeneratingEdukasi, setIsGeneratingEdukasi] = useState(false);
+  const [generatedScriptData, setGeneratedScriptData] = useState<{
+    title?: string;
+    hook_text?: string;
+    full_script?: string;
+    target_duration_seconds?: number;
+    scenes?: Array<{
+      scene_num: number;
+      time_range: string;
+      visual_direction: string;
+      narration: string;
+      motion_fx: string;
+      sound_fx: string;
+    }>;
+  } | null>(null);
+  const [edukasiFootageFile, setEdukasiFootageFile] = useState<File | null>(null);
+  const [isRenderingEdukasi, setIsRenderingEdukasi] = useState(false);
 
-  // Shorts Factory (Reference Cloning + Revision) states
-  const [newShortsNiche, setNewShortsNiche] = useState<ShortsItem["niche"]>(
-    "Islamic"
-  );
-  const [newShortsTitle, setNewShortsTitle] = useState("");
-  const [newShortsRefUrl, setNewShortsRefUrl] = useState("");
-  const [newShortsHook, setNewShortsHook] = useState("");
-  const [newShortsStyleNotes, setNewShortsStyleNotes] = useState("");
-  const [revisionInputs, setRevisionInputs] = useState<Record<string, string>>(
-    {}
-  );
-
-  // Office states
-  const [newTaskTitle, setNewTaskTitle] = useState("");
+  // ---------------------------------------------------------------------------
+  // TAB 3: CS AUTO RESPONDER (INSTAGRAM DM LIVE CHAT HISTORY ONLY)
+  // ---------------------------------------------------------------------------
+  const [searchHandle, setSearchHandle] = useState("");
+  const [chatFilter, setChatFilter] = useState<"all" | "replied" | "pending">("all");
 
   const notify = (msg: string) => {
     setToast(msg);
-    setTimeout(() => setToast(null), 4200);
+    setTimeout(() => setToast(null), 4000);
   };
 
+  // Sync data with Supabase on mount
   useEffect(() => {
     const sb = supabase;
     if (!isSupabaseConfigured || !sb) return;
     const fetchAll = async () => {
-      const [offRes, chatRes, shRes, jobRes] = await Promise.all([
-        sb
-          .from("office_tasks")
-          .select("*")
-          .order("created_at", { ascending: false }),
-        sb
-          .from("social_chat_leads")
-          .select("*")
-          .order("created_at", { ascending: false }),
-        sb
-          .from("youtube_shorts_queue")
-          .select("*")
-          .order("created_at", { ascending: false }),
-        sb
-          .from("agent_jobs")
-          .select("*")
-          .order("created_at", { ascending: false }),
+      const [chatRes, shRes] = await Promise.all([
+        sb.from("social_chat_leads").select("*").order("created_at", { ascending: false }),
+        sb.from("youtube_shorts_queue").select("*").order("created_at", { ascending: false }),
       ]);
-      if (offRes.data?.length) setOfficeTasks(offRes.data);
       if (chatRes.data?.length) setSocialChats(chatRes.data);
       if (shRes.data?.length) setShortsQueue(shRes.data);
-      if (jobRes.data?.length) setAgentJobs(jobRes.data);
     };
     fetchAll();
   }, []);
 
-  // 1. Handle Incoming Social Chat Simulation / Live Webhook Trigger
-  const handleSimulateIncomingChat = async (e: React.FormEvent) => {
+  // Handler: Process Islamic Short ala Z-Code
+  const handleProcessIslamicShort = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!simMessage.trim()) return;
-    setIsSendingChat(true);
-
-    const handleClean = simHandle.trim()
-      ? simHandle.startsWith("@")
-        ? simHandle.trim()
-        : `@${simHandle.trim()}`
-      : "@client_baru";
-
-    try {
-      const res = await fetch("/api/social-webhook", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          platform: simPlatform,
-          sender_handle: handleClean,
-          sender_name: handleClean.replace("@", ""),
-          incoming_message: simMessage,
-          sop_context: sopInstruction,
-        }),
-      });
-      const data = await res.json();
-
-      const newLead: SocialChatLead = {
-        id: `chat-${Date.now()}`,
-        platform: simPlatform,
-        sender_handle: handleClean,
-        sender_name: handleClean.replace("@", ""),
-        incoming_message: simMessage,
-        ai_auto_reply:
-          data.ai_auto_reply ||
-          `Halo Kak! Pesan Kakak sudah kami terima. Tim utama sudah menerima notifikasi di Telegram dan segera menghubungi Kakak kembali.`,
-        intent_category: data.intent_category || "Tanya_Harga",
-        status: "Notified_Telegram",
-        telegram_notified: true,
-        response_time_sec: 1,
-        created_at: new Date().toISOString(),
-      };
-
-      setSocialChats([newLead, ...socialChats]);
-      setSimHandle("");
-      setSimMessage("");
-      notify(
-        `Pesan ${simPlatform} dari ${handleClean} otomatis dibalas & notifikasi dikirim ke Telegram Bot.`
-      );
-    } catch {
-      notify("Simulasi lokal berhasil ditambahkan ke antrean.");
-    } finally {
-      setIsSendingChat(false);
+    if (!islamicTitle.trim()) {
+      notify("Mohon isi Title Cover terlebih dahulu!");
+      return;
     }
-  };
+    setIsProcessingIslamic(true);
 
-  // 2. Handle Create Reference-Cloned Shorts Project
-  const getDefaultPresetForNiche = (niche: ShortsItem["niche"]) => {
-    if (niche === "Islamic") {
-      return {
-        preset:
-          "Clone Editan Asli Channel (400->1K Subs) + Peningkatan Color Grading, Subtitle Karaoke Presisi & Audio Ducking",
-        engine: "ReelMimic (analyze.py) + FFmpeg-Skill (h264_qsv)",
-        defaultRef: "local://referensi-islami-400subs-master.mp4",
-      };
-    }
-    if (niche === "Edukasi_CalonSarjana") {
-      return {
-        preset:
-          "Gaya Calon Sarjana Pro: Motion Graphics Cepat, Overlay Angka/Fakta, SFX Whoosh/Pop/Suspense, BGM Dinamis",
-        engine: "ReelMimic + Hyperframes + FFmpeg-Skill",
-        defaultRef: "https://www.youtube.com/shorts/referensi-calon-sarjana",
-      };
-    }
-    return {
-      preset:
-        "Clone Referensi Roblox/Minecraft: Subtitle Bouncy Pop-Up, Camera Zoom/Shake, SFX Meme Anak & Fast Cut",
-      engine: "ReelMimic (video-clone) + OpenMontage + FFmpeg-Skill",
-      defaultRef: "https://www.youtube.com/shorts/referensi-roblox-minecraft",
-    };
-  };
-
-  const handleAiAutoGenerateShorts = async (
-    niche: ShortsItem["niche"] = "Edukasi_CalonSarjana"
-  ) => {
-    setIsGeneratingShorts(true);
-    notify(
-      `🤖 AI sedang meriset topik viral & menyusun naskah gaya ${
-        niche === "Edukasi_CalonSarjana" ? "Calon Sarjana" : niche
-      }...`
-    );
     try {
       const res = await fetch("/api/shorts/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          niche,
-          custom_topic: edukasiTopicInput.trim() || undefined,
-          reference_url: edukasiRefUrl.trim() || undefined,
+          niche: "Islamic",
+          custom_topic: islamicTitle,
+          source_channel: islamicSourceYt || "YNTV",
+          duration_target: "1.5m",
         }),
       });
       const data = await res.json();
       if (data.ok && data.item) {
         setShortsQueue((prev) => [data.item, ...prev]);
-        notify(
-          `⚡ Naskah Selesai: "${data.item.title}"! Masuk antrean render laptop.`
-        );
-        setEdukasiTopicInput("");
+        notify("🚀 Video Islamic dijadwalkan untuk auto-edit Z-Code di laptop lokal!");
       } else {
-        notify(`Gagal generate naskah: ${data.error || "Unknown error"}`);
+        notify("Gagal menjadwalkan: " + (data.error || "Unknown error"));
       }
-    } catch {
-      notify("Koneksi gagal saat menghubungi AI Groq.");
+    } catch (err: unknown) {
+      notify("Error: " + (err instanceof Error ? err.message : "Network error"));
     } finally {
-      setIsGeneratingShorts(false);
+      setIsProcessingIslamic(false);
     }
   };
 
-  const handleAddClonedShort = async (e: React.FormEvent) => {
+  // Handler: Generate Edukasi Script & 5-Scene Breakdown
+  const handleGenerateEdukasiScript = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newShortsTitle.trim()) return;
-    const cfg = getDefaultPresetForNiche(newShortsNiche);
+    setIsGeneratingEdukasi(true);
+    setGeneratedScriptData(null);
 
-    const newItem: ShortsItem = {
-      id: `sh-${Date.now()}`,
-      niche: newShortsNiche,
-      title: newShortsTitle,
-      hook_text:
-        newShortsHook ||
-        "Hook 3 detik pertama disesuaikan otomatis dengan ritme video referensi.",
-      full_script:
-        "Disusun otomatis oleh Sub-Agen Scriptwriter (Groq/Gemini Rp 0) mengikuti durasi per-scene dari video referensi ReelMimic.",
-      reference_video_url: newShortsRefUrl.trim() || cfg.defaultRef,
-      style_preset: cfg.preset,
-      sfx_and_motion_notes:
-        newShortsStyleNotes.trim() ||
-        "Tiru persis gaya subtitle, transisi motion, zoom, dan timing SFX dari video referensi, dengan isi konten baru yang lebih profesional.",
-      engine_used: cfg.engine,
-      status: "Cloning_Style",
-      revision_notes: null,
-      revision_version: 1,
-      telegram_message_url: null,
-      created_at: new Date().toISOString(),
-    };
-
-    const newJob: AgentJob = {
-      id: `job-${Date.now()}`,
-      agent_type: "ReelMimic_Cloner",
-      command_payload: {
-        shorts_id: newItem.id,
-        niche: newItem.niche,
-        title: newItem.title,
-        reference_video_url: newItem.reference_video_url,
-        sfx_and_motion_notes: newItem.sfx_and_motion_notes,
-      },
-      status: "Pending",
-      result_log:
-        "Menunggu eksekusi analisis ReelMimic & render FFmpeg-Skill ke Telegram...",
-      created_at: new Date().toISOString(),
-    };
-
-    setShortsQueue([newItem, ...shortsQueue]);
-    setAgentJobs([newJob, ...agentJobs]);
-    setNewShortsTitle("");
-    setNewShortsRefUrl("");
-    setNewShortsHook("");
-    setNewShortsStyleNotes("");
-    notify(
-      `Proyek Shorts "${newItem.title}" masuk antrean ReelMimic Style Cloning.`
-    );
-
-    if (isSupabaseConfigured && supabase) {
-      await supabase.from("youtube_shorts_queue").insert([
-        {
-          niche: newItem.niche,
-          title: newItem.title,
-          hook_text: newItem.hook_text,
-          full_script: newItem.full_script,
-          reference_video_url: newItem.reference_video_url,
-          style_preset: newItem.style_preset,
-          sfx_and_motion_notes: newItem.sfx_and_motion_notes,
-          engine_used: newItem.engine_used,
-          status: newItem.status,
-          revision_version: 1,
-        },
-      ]);
-      await supabase.from("agent_jobs").insert([
-        {
-          agent_type: newJob.agent_type,
-          command_payload: newJob.command_payload,
-          status: "Pending",
-          result_log: newJob.result_log,
-        },
-      ]);
+    try {
+      const res = await fetch("/api/shorts/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          niche: "Edukasi_CalonSarjana",
+          custom_topic: edukasiTopic,
+          duration_target: edukasiDuration,
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        const payload = data.parsed_data || data.item;
+        setGeneratedScriptData(payload);
+        if (data.item) {
+          setShortsQueue((prev) => [data.item, ...prev]);
+        }
+        notify("✨ Naskah & 5 Scene Breakdown edukasi berhasil digenerate!");
+      } else {
+        notify("Gagal generate: " + (data.error || "Unknown error"));
+      }
+    } catch (err: unknown) {
+      notify("Error: " + (err instanceof Error ? err.message : "Network error"));
+    } finally {
+      setIsGeneratingEdukasi(false);
     }
   };
 
-  // 3. Handle Targeted Video Revision Request
-  const handleRequestRevision = async (item: ShortsItem) => {
-    const note = revisionInputs[item.id]?.trim();
-    if (!note) {
-      notify("Tulis catatan bagian yang ingin direvisi terlebih dahulu.");
-      return;
-    }
-
-    const nextVer = (item.revision_version || 1) + 1;
-
-    setShortsQueue((prev) =>
-      prev.map((s) =>
-        s.id === item.id
-          ? {
-              ...s,
-              status: "Revision_Requested",
-              revision_notes: note,
-              revision_version: nextVer,
-            }
-          : s
-      )
-    );
-
-    const revJob: AgentJob = {
-      id: `job-rev-${Date.now()}`,
-      agent_type: "Video_Revision_Worker",
-      command_payload: {
-        shorts_id: item.id,
-        title: item.title,
-        niche: item.niche,
-        target_version: nextVer,
-        revision_instruction: note,
-        reference_video_url: item.reference_video_url,
-      },
-      status: "Pending",
-      result_log: `Revisi v${nextVer} dijadwalkan: "${note}"`,
-      created_at: new Date().toISOString(),
-    };
-
-    setAgentJobs([revJob, ...agentJobs]);
-    setRevisionInputs((prev) => ({ ...prev, [item.id]: "" }));
-    notify(
-      `Permintaan Revisi (v${nextVer}) untuk "${item.title}" dikirim ke antrean Render.`
-    );
-
-    if (isSupabaseConfigured && supabase) {
-      await supabase
-        .from("youtube_shorts_queue")
-        .update({
-          status: "Revision_Requested",
-          revision_notes: note,
-          revision_version: nextVer,
-        })
-        .eq("id", item.id);
-      await supabase.from("agent_jobs").insert([
-        {
-          agent_type: revJob.agent_type,
-          command_payload: revJob.command_payload,
-          status: "Pending",
-          result_log: revJob.result_log,
-        },
-      ]);
-    }
-  };
-
-  // 4. Office Task Handler
-  const handleAddOfficeTask = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTaskTitle.trim()) return;
-    const task: OfficeTask = {
-      id: `off-${Date.now()}`,
-      title: newTaskTitle,
-      category: "Kantor",
-      priority: "High",
-      status: "Todo",
-      ai_summary:
-        "Antrean dikirim ke Headroom + Groq Cloud untuk dirangkum ke Obsidian Vault.",
-      obsidian_path: `01-Kantor/${newTaskTitle
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")}.md`,
-      created_at: new Date().toISOString(),
-    };
-    setOfficeTasks([task, ...officeTasks]);
-    setNewTaskTitle("");
-    notify("Tugas kantor ditambahkan & disinkronkan ke Obsidian.");
-  };
-
-  const filteredShorts =
-    selectedNiche === "ALL"
-      ? shortsQueue
-      : shortsQueue.filter((s) => s.niche === selectedNiche);
-
-  const getNicheLabel = (niche: ShortsItem["niche"]) => {
-    switch (niche) {
-      case "Islamic":
-        return "Islami (400 → 1K Subs)";
-      case "Edukasi_CalonSarjana":
-        return "Edukasi & Fakta (Gaya Calon Sarjana)";
-      case "Gaming_Roblox_Minecraft":
-        return "Anak: Roblox & Minecraft";
-    }
-  };
+  // Filtered Instagram chats
+  const filteredChats = socialChats.filter((c) => {
+    const matchHandle =
+      c.sender_handle.toLowerCase().includes(searchHandle.toLowerCase()) ||
+      c.incoming_message.toLowerCase().includes(searchHandle.toLowerCase());
+    if (chatFilter === "replied") return matchHandle && c.ai_auto_reply;
+    if (chatFilter === "pending") return matchHandle && !c.ai_auto_reply;
+    return matchHandle;
+  });
 
   return (
-    <div className="min-h-screen bg-[#07080a] text-zinc-100 selection:bg-emerald-500/20 selection:text-emerald-200 antialiased">
-      {/* Subtle Monochromatic Ambient Glass Lighting */}
-      <div className="pointer-events-none fixed inset-0 overflow-hidden z-0">
-        <div className="absolute -top-48 left-1/4 h-96 w-96 rounded-full bg-white/[0.03] blur-3xl" />
-        <div className="absolute top-1/3 right-1/4 h-96 w-96 rounded-full bg-emerald-500/[0.03] blur-3xl" />
-      </div>
-
-      {/* Toast Notification (Glass) */}
+    <div className="flex h-screen bg-[#07090e] text-slate-100 font-sans overflow-hidden">
+      {/* Toast Alert */}
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-xl border border-white/15 bg-zinc-900/85 px-5 py-3.5 text-sm text-zinc-100 shadow-2xl backdrop-blur-2xl">
-          <span className="h-2 w-2 rounded-full bg-emerald-400" />
+        <div className="fixed top-5 right-5 z-50 flex items-center gap-3 bg-gradient-to-r from-emerald-600 to-teal-700 text-white px-5 py-3 rounded-xl shadow-2xl border border-emerald-400/30 text-sm font-semibold animate-bounce">
+          <CheckCircle2 className="w-5 h-5 text-emerald-200" />
           <span>{toast}</span>
         </div>
       )}
 
-      {/* Top Glass Header */}
-      <header className="sticky top-0 z-40 border-b border-white/[0.07] bg-[#07080a]/75 backdrop-blur-2xl">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-3.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/15 bg-white/[0.04] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.12)]">
-              <Layers className="h-4 w-4 text-zinc-200" />
+      {/* =====================================================================
+          SIDEBAR NAVIGATION (GAYA SIDEBAR KIRI)
+          ===================================================================== */}
+      <aside className="w-72 bg-[#0c101c] border-r border-slate-800/80 flex flex-col justify-between p-5 select-none shrink-0">
+        <div>
+          {/* Logo & Brand Header */}
+          <div className="flex items-center gap-3 mb-8 px-2">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 via-orange-600 to-red-600 flex items-center justify-center shadow-lg shadow-orange-500/20 font-black text-xl text-white">
+              AI
             </div>
             <div>
-              <div className="flex items-center gap-2.5">
-                <h1 className="text-sm font-semibold tracking-tight text-white">
-                  AI Operations Console
-                </h1>
-                <span className="rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-300">
-                  24/7 Cloud Online · Rp 0
-                </span>
+              <div className="text-base font-black tracking-wider text-white flex items-center gap-2">
+                AI EMPIRE
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
               </div>
-              <p className="text-xs text-zinc-500">
-                Social Auto-Responder · ReelMimic Video Studio · Obsidian Memory
-              </p>
+              <div className="text-[11px] font-semibold text-slate-400">
+                Command Center 2026
+              </div>
             </div>
           </div>
 
-          {/* Navigation Pills (Monochromatic Glass) */}
-          <nav className="flex items-center gap-1 rounded-xl border border-white/[0.08] bg-white/[0.02] p-1 backdrop-blur-xl">
-            {[
-              {
-                id: "responder",
-                label: "CS Auto-Responder (IG & TikTok)",
-                icon: MessageSquare,
-              },
-              {
-                id: "shorts",
-                label: "YouTube Studio (ReelMimic)",
-                icon: Video,
-              },
-              {
-                id: "office",
-                label: "Kantor & Obsidian",
-                icon: Briefcase,
-              },
-              {
-                id: "system",
-                label: "Arsitektur & Antrean",
-                icon: Terminal,
-              },
-            ].map((tab) => {
-              const Icon = tab.icon;
-              const active = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() =>
-                    setActiveTab(
-                      tab.id as "responder" | "shorts" | "office" | "system"
-                    )
-                  }
-                  className={`flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-medium transition-all ${
-                    active
-                      ? "border border-white/15 bg-white/[0.08] text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.1)]"
-                      : "text-zinc-400 hover:bg-white/[0.03] hover:text-zinc-200"
-                  }`}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
+          {/* Navigation Menu List */}
+          <nav className="space-y-1.5">
+            <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-3 mb-2">
+              Divisi Konten & Bisnis
+            </div>
+
+            {/* Menu 1: Shorts Islamic */}
+            <button
+              onClick={() => setActiveTab("islamic")}
+              className={`w-full flex items-center gap-3.5 px-3.5 py-3 rounded-xl font-bold text-sm transition-all text-left ${
+                activeTab === "islamic"
+                  ? "bg-gradient-to-r from-amber-500/20 to-orange-500/10 text-amber-400 border border-amber-500/40 shadow-lg shadow-amber-500/10"
+                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
+              }`}
+            >
+              <Moon className="w-5 h-5 text-amber-400" />
+              <div className="flex-1">
+                <div className="leading-tight">Shorts Islamic</div>
+                <div className="text-[10px] text-slate-500 font-normal mt-0.5">
+                  Editor Z-Code @islamic-short
+                </div>
+              </div>
+              {activeTab === "islamic" && (
+                <div className="w-1.5 h-4 bg-amber-400 rounded-full"></div>
+              )}
+            </button>
+
+            {/* Menu 2: Shorts Edukasi */}
+            <button
+              onClick={() => setActiveTab("edukasi")}
+              className={`w-full flex items-center gap-3.5 px-3.5 py-3 rounded-xl font-bold text-sm transition-all text-left ${
+                activeTab === "edukasi"
+                  ? "bg-gradient-to-r from-teal-500/20 to-cyan-500/10 text-teal-300 border border-teal-500/40 shadow-lg shadow-teal-500/10"
+                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
+              }`}
+            >
+              <GraduationCap className="w-5 h-5 text-teal-400" />
+              <div className="flex-1">
+                <div className="leading-tight">Shorts Edukasi</div>
+                <div className="text-[10px] text-slate-500 font-normal mt-0.5">
+                  AI Script & 5-Scene Breakdown
+                </div>
+              </div>
+              {activeTab === "edukasi" && (
+                <div className="w-1.5 h-4 bg-teal-400 rounded-full"></div>
+              )}
+            </button>
+
+            {/* Menu 3: CS Auto Responder */}
+            <button
+              onClick={() => setActiveTab("responder")}
+              className={`w-full flex items-center gap-3.5 px-3.5 py-3 rounded-xl font-bold text-sm transition-all text-left ${
+                activeTab === "responder"
+                  ? "bg-gradient-to-r from-pink-500/20 to-rose-500/10 text-pink-400 border border-pink-500/40 shadow-lg shadow-pink-500/10"
+                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
+              }`}
+            >
+              <MessageSquare className="w-5 h-5 text-pink-400" />
+              <div className="flex-1">
+                <div className="leading-tight">CS Instagram DM</div>
+                <div className="text-[10px] text-slate-500 font-normal mt-0.5">
+                  Riwayat Chat Client Real-Time
+                </div>
+              </div>
+              {socialChats.length > 0 && (
+                <span className="bg-pink-500/20 text-pink-300 border border-pink-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                  {socialChats.length}
+                </span>
+              )}
+            </button>
+
+            <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-3 pt-6 mb-2">
+              Infrastruktur
+            </div>
+
+            {/* Menu 4: Status & Settings */}
+            <button
+              onClick={() => setActiveTab("settings")}
+              className={`w-full flex items-center gap-3.5 px-3.5 py-3 rounded-xl font-bold text-sm transition-all text-left ${
+                activeTab === "settings"
+                  ? "bg-gradient-to-r from-blue-500/20 to-indigo-500/10 text-blue-400 border border-blue-500/40 shadow-lg shadow-blue-500/10"
+                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
+              }`}
+            >
+              <Sliders className="w-5 h-5 text-blue-400" />
+              <div className="flex-1">
+                <div className="leading-tight">Sistem & Status</div>
+                <div className="text-[10px] text-slate-500 font-normal mt-0.5">
+                  Local Bridge & Telegram
+                </div>
+              </div>
+            </button>
           </nav>
         </div>
-      </header>
 
-      {/* Main Content */}
-      <main className="relative z-10 mx-auto max-w-7xl px-6 py-8">
-        {/* Executive Status Strip */}
-        <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-4">
-          <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-5 backdrop-blur-2xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]">
-            <div className="flex items-center justify-between text-xs text-zinc-400">
-              <span>Auto-Responder IG & TikTok</span>
-              <span className="flex items-center gap-1.5 text-emerald-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                Aktif 24 Jam
-              </span>
+        {/* Sidebar Footer Stats */}
+        <div className="pt-4 border-t border-slate-800/80 space-y-3">
+          <div className="p-3 bg-slate-900/80 border border-slate-800 rounded-xl">
+            <div className="flex items-center justify-between text-xs font-semibold text-slate-300 mb-1">
+              <span>Channel Islamic:</span>
+              <span className="text-amber-400 font-bold">465 Subs</span>
             </div>
-            <div className="mt-2 flex items-baseline justify-between">
-              <span className="text-2xl font-semibold tracking-tight text-white">
-                {socialChats.length} Percakapan
-              </span>
-              <span className="text-xs text-zinc-500">Avg. balas 1.2 dtk</span>
+            <div className="text-[11px] text-slate-400 font-mono">
+              @islamic-short-513 (52 Video)
             </div>
           </div>
-
-          <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-5 backdrop-blur-2xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]">
-            <div className="flex items-center justify-between text-xs text-zinc-400">
-              <span>Notifikasi Client ke Telegram</span>
-              <Bell className="h-3.5 w-3.5 text-zinc-500" />
-            </div>
-            <div className="mt-2 flex items-baseline justify-between">
-              <span className="text-2xl font-semibold tracking-tight text-white">
-                100% Terkirim
-              </span>
-              <span className="text-xs text-zinc-500">Zero Lost Leads</span>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-5 backdrop-blur-2xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]">
-            <div className="flex items-center justify-between text-xs text-zinc-400">
-              <span>Pabrik Shorts (ReelMimic)</span>
-              <Video className="h-3.5 w-3.5 text-zinc-500" />
-            </div>
-            <div className="mt-2 flex items-baseline justify-between">
-              <span className="text-2xl font-semibold tracking-tight text-white">
-                {shortsQueue.length} Proyek
-              </span>
-              <span className="text-xs text-zinc-500">
-                Islami · Edukasi · Roblox
-              </span>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-5 backdrop-blur-2xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]">
-            <div className="flex items-center justify-between text-xs text-zinc-400">
-              <span>Beban Kredit & RAM</span>
-              <Sliders className="h-3.5 w-3.5 text-zinc-500" />
-            </div>
-            <div className="mt-2 flex items-baseline justify-between">
-              <span className="text-2xl font-semibold tracking-tight text-emerald-400">
-                Rp 0 / Gratis
-              </span>
-              <span className="text-xs text-zinc-500">Groq + Gemini + TG</span>
-            </div>
+          <div className="flex items-center gap-2 text-[11px] font-medium text-emerald-400 px-1">
+            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span>Laptop Local Bridge Ready</span>
           </div>
         </div>
+      </aside>
 
+      {/* =====================================================================
+          MAIN CONTENT AREA
+          ===================================================================== */}
+      <main className="flex-1 flex flex-col overflow-y-auto bg-gradient-to-b from-[#0a0d16] to-[#06080e] p-8">
         {/* ===================================================================
-            TAB 1: SOCIAL CS AUTO-RESPONDER (INSTAGRAM & TIKTOK -> TELEGRAM)
-        =================================================================== */}
-        {activeTab === "responder" && (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-            {/* Left Column: SOP Config & Live Chat Tester */}
-            <div className="space-y-6 lg:col-span-5">
-              {/* Glass Card: SOP Knowledge Base */}
-              <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-6 backdrop-blur-2xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]">
-                <div className="mb-4 flex items-center justify-between">
+            TAB 1: SHORTS ISLAMIC (Z-CODE AUTOMATED EDITOR)
+            =================================================================== */}
+        {activeTab === "islamic" && (
+          <div className="max-w-6xl mx-auto w-full space-y-8 animate-fadeIn">
+            {/* Header Islamic */}
+            <div className="flex items-start justify-between border-b border-slate-800 pb-5">
+              <div>
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+                    <Moon className="w-6 h-6 text-amber-400" />
+                  </div>
                   <div>
-                    <h2 className="text-sm font-semibold text-white">
-                      SOP & Memori Balasan AI (Obsidian Sync)
-                    </h2>
-                    <p className="text-xs text-zinc-400">
-                      Pedoman yang dipakai AI saat membalas chat IG & TikTok
+                    <h1 className="text-2xl font-black text-white tracking-wide">
+                      Editor Shorts Islamic (Sistem Z-Code)
+                    </h1>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Fokus Channel YouTube{" "}
+                      <span className="text-amber-400 font-bold">
+                        @islamic-short-513
+                      </span>{" "}
+                      · Drag & Drop Clip Video Mentah ➔ AI Edit Otomatis
                     </p>
                   </div>
-                  <span className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] text-zinc-300">
-                    02-CS-Sosmed/SOP.md
-                  </span>
-                </div>
-                <textarea
-                  rows={4}
-                  value={sopInstruction}
-                  onChange={(e) => setSopInstruction(e.target.value)}
-                  className="w-full rounded-xl border border-white/[0.08] bg-black/40 p-3.5 text-xs leading-relaxed text-zinc-200 placeholder-zinc-600 focus:border-white/25 focus:outline-none"
-                />
-                <div className="mt-3 flex items-center justify-between text-[11px] text-zinc-500">
-                  <span>Engine: Groq Llama-3.3-70B (Gratis Rp 0)</span>
-                  <button
-                    onClick={() =>
-                      notify(
-                        "SOP Customer Service berhasil disimpan & disinkronkan ke Obsidian."
-                      )
-                    }
-                    className="rounded-lg border border-white/15 bg-white/[0.06] px-3 py-1.5 text-xs font-medium text-white hover:bg-white/[0.12] transition"
-                  >
-                    Simpan SOP
-                  </button>
                 </div>
               </div>
+              <div className="text-right hidden sm:block">
+                <span className="bg-amber-500/10 text-amber-400 border border-amber-500/30 text-xs font-bold px-3 py-1.5 rounded-lg">
+                  Target: 465 ➔ 10.000 Subs
+                </span>
+              </div>
+            </div>
 
-              {/* Glass Card: Test Incoming Client Message */}
-              <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-6 backdrop-blur-2xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]">
-                <h2 className="text-sm font-semibold text-white">
-                  Uji Coba Chat Client Masuk (Simulasi Real-Time)
-                </h2>
-                <p className="mt-1 text-xs text-zinc-400">
-                  Tes bagaimana AI langsung membalas chat client dalam 1 detik &
-                  meneruskan notifikasi ke Telegram Bot kamu.
-                </p>
+            {/* Layout: Z-Code Upload & Style Preview */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              {/* Form Upload & Z-Code Config (7 Cols) */}
+              <div className="lg:col-span-7 bg-[#0f1424] border border-slate-800/90 rounded-2xl p-6 shadow-xl space-y-6">
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    <UploadCloud className="w-5 h-5 text-amber-400" />
+                    Drag & Drop Video Mentah / Clip Podcast
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Masukkan video landscape (misal rekaman 1–2 menit Ustadz Felix Siauw), AI akan memotong otomatis ke portrait 9:16.
+                  </p>
+                </div>
 
-                <form
-                  onSubmit={handleSimulateIncomingChat}
-                  className="mt-4 space-y-3.5"
-                >
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="mb-1.5 block text-[11px] text-zinc-400">
-                        Platform Sosmed
-                      </label>
-                      <select
-                        value={simPlatform}
-                        onChange={(e) =>
-                          setSimPlatform(
-                            e.target.value as "Instagram" | "TikTok"
-                          )
-                        }
-                        className="w-full rounded-xl border border-white/[0.08] bg-black/50 px-3 py-2.5 text-xs text-white focus:border-white/25 focus:outline-none"
-                      >
-                        <option value="Instagram">Instagram DM / Komen</option>
-                        <option value="TikTok">TikTok DM / Komen</option>
-                      </select>
+                <form onSubmit={handleProcessIslamicShort} className="space-y-5">
+                  {/* Drag and Drop Zone */}
+                  <label
+                    htmlFor="islamicFile"
+                    className="border-2 border-dashed border-amber-500/30 hover:border-amber-400 bg-amber-500/5 hover:bg-amber-500/10 rounded-2xl p-6 flex flex-col items-center justify-center cursor-pointer transition-all group"
+                  >
+                    <FileVideo className="w-12 h-12 text-amber-400 group-hover:scale-110 transition-transform mb-3" />
+                    <div className="text-sm font-bold text-white">
+                      {islamicVideoFile
+                        ? islamicVideoFile.name
+                        : "Klik atau Drag & Drop Video Mentah ke Sini"}
                     </div>
-                    <div>
-                      <label className="mb-1.5 block text-[11px] text-zinc-400">
-                        Username Client
-                      </label>
+                    <div className="text-xs text-slate-400 mt-1">
+                      Format: MP4, MOV, atau MKV (Maks 250 MB)
+                    </div>
+                    <input
+                      id="islamicFile"
+                      type="file"
+                      accept="video/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files?.[0]) setIslamicVideoFile(e.target.files[0]);
+                      }}
+                    />
+                  </label>
+
+                  {/* Title Cover Box Input */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
+                      Title Box Kuning di Cover Depan
+                    </label>
+                    <input
+                      type="text"
+                      value={islamicTitle}
+                      onChange={(e) => setIslamicTitle(e.target.value)}
+                      placeholder="Contoh: Ternyata Ustad Felix Bisa Sombong, Tapi..."
+                      className="w-full bg-[#161c30] border border-slate-700/80 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                    />
+                    <p className="text-[11px] text-slate-400 mt-1.5">
+                      *Akan ditampilkan dalam box kuning tebal bergaris tepi putih khas channel Anda.
+                    </p>
+                  </div>
+
+                  {/* Source YouTube Watermark Input */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
+                      Nama Source YouTube yang Di-Clip
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <div className="bg-red-600 text-white font-bold text-xs px-3 py-3 rounded-xl flex items-center gap-1.5 shrink-0">
+                        <Play className="w-3.5 h-3.5 fill-white" />
+                        <span>YouTube</span>
+                      </div>
                       <input
                         type="text"
-                        placeholder="@username_client"
-                        value={simHandle}
-                        onChange={(e) => setSimHandle(e.target.value)}
-                        className="w-full rounded-xl border border-white/[0.08] bg-black/50 px-3 py-2.5 text-xs text-white placeholder-zinc-600 focus:border-white/25 focus:outline-none"
+                        value={islamicSourceYt}
+                        onChange={(e) => setIslamicSourceYt(e.target.value)}
+                        placeholder="Contoh: YNTV, Al-Fatih Press, Felix Siauw"
+                        className="w-full bg-[#161c30] border border-slate-700/80 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
                       />
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1.5">
+                      *Ditampilkan persis di bawah subtitle: [🔴 YT Logo] + {islamicSourceYt || "YNTV"}
+                    </p>
+                  </div>
+
+                  {/* Checkbox Options ala Z-Code */}
+                  <div className="bg-[#14192b] border border-slate-800 rounded-xl p-4 space-y-3">
+                    <div className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                      Otomatisasi Editing Z-Code (Aktif):
+                    </div>
+                    <label className="flex items-center gap-3 text-xs text-slate-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={optSmartCrop}
+                        onChange={(e) => setOptSmartCrop(e.target.checked)}
+                        className="w-4 h-4 accent-amber-500 rounded"
+                      />
+                      <span>Auto-Crop Portrait 9:16 Wajah Pembicara dari Landscape</span>
+                    </label>
+                    <label className="flex items-center gap-3 text-xs text-slate-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={optBoldSubtitle}
+                        onChange={(e) => setOptBoldSubtitle(e.target.checked)}
+                        className="w-4 h-4 accent-amber-500 rounded"
+                      />
+                      <span>Subtitle Bold Kuning/Merah/Putih dengan Outline Hitam</span>
+                    </label>
+                    <label className="flex items-center gap-3 text-xs text-slate-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={optCapcutHd}
+                        onChange={(e) => setOptCapcutHd(e.target.checked)}
+                        className="w-4 h-4 accent-amber-500 rounded"
+                      />
+                      <span>Filter CapCut 4K HD Sharpness & Contrast Boost</span>
+                    </label>
+                  </div>
+
+                  {/* Submit Button */}
+                  <button
+                    type="submit"
+                    disabled={isProcessingIslamic}
+                    className="w-full bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-600 hover:to-orange-600 text-slate-950 font-black py-4 rounded-xl shadow-xl shadow-orange-500/20 text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                  >
+                    {isProcessingIslamic ? (
+                      <>
+                        <RefreshCw className="w-5 h-5 animate-spin" />
+                        <span>Sedang Memproses di Laptop Lokal...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="w-5 h-5 fill-slate-950" />
+                        <span>Proses Video Otomatis ala Z-Code (Kirim ke Telegram)</span>
+                      </>
+                    )}
+                  </button>
+                </form>
+              </div>
+
+              {/* Live Preview Template Style (5 Cols) */}
+              <div className="lg:col-span-5 bg-[#0f1424] border border-slate-800/90 rounded-2xl p-6 shadow-xl flex flex-col items-center">
+                <div className="w-full text-left mb-4">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-400" />
+                    Preview Layout Template Asli Channel Anda
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Sesuai referensi video podcast & cover @islamic-short-513:
+                  </p>
+                </div>
+
+                {/* 9:16 Mockup Frame */}
+                <div className="w-[280px] h-[500px] bg-gradient-to-b from-slate-900 to-slate-950 border-4 border-slate-700/80 rounded-[32px] overflow-hidden relative shadow-2xl flex flex-col justify-between p-4">
+                  {/* Mockup Video Image / Podcaster */}
+                  <div className="absolute inset-0 bg-cover bg-center opacity-60 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-amber-900/40 via-slate-900 to-black"></div>
+
+                  {/* Top Yellow Cover Box Title Preview */}
+                  <div className="relative z-10 mt-6 px-2">
+                    <div className="bg-[#FFE600] text-black font-black text-xs px-3 py-2 rounded-xl text-center leading-tight shadow-lg border-2 border-white uppercase tracking-tight">
+                      {islamicTitle || "TITLE BOX KUNING DI SINI"}
                     </div>
                   </div>
 
+                  {/* Center Speaker Simulation */}
+                  <div className="relative z-10 text-center my-auto">
+                    <div className="w-20 h-20 rounded-full bg-slate-800 border-2 border-amber-400/50 mx-auto flex items-center justify-center shadow-lg">
+                      <Play className="w-8 h-8 text-amber-400 fill-amber-400" />
+                    </div>
+                  </div>
+
+                  {/* Bottom Subtitle & Source Watermark */}
+                  <div className="relative z-10 mb-4 text-center space-y-2">
+                    {/* Bold Subtitle (Kuning & Merah) */}
+                    <div className="text-center font-black tracking-wider drop-shadow-[0_4px_8px_rgba(0,0,0,1)]">
+                      <span className="text-[#FFE600] text-lg block stroke-black">
+                        SEANDAINYA
+                      </span>
+                      <span className="text-white text-base block font-black">
+                        KARENA AKU
+                      </span>
+                    </div>
+
+                    {/* YouTube Source Badge Under Subtitle */}
+                    <div className="inline-flex items-center gap-1.5 bg-black/80 backdrop-blur-md px-3 py-1 rounded-full border border-white/20">
+                      <div className="w-3.5 h-3.5 bg-red-600 rounded-full flex items-center justify-center">
+                        <Play className="w-2 h-2 text-white fill-white" />
+                      </div>
+                      <span className="text-white font-black text-[11px] tracking-wider uppercase">
+                        {islamicSourceYt || "YNTV"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="text-[11px] text-slate-400 mt-4 text-center">
+                  💡 Format identik dengan 52 video Shorts yang sudah viral di channel Anda.
+                </div>
+              </div>
+            </div>
+
+            {/* Riwayat Shorts Islamic Table */}
+            <div className="bg-[#0f1424] border border-slate-800/90 rounded-2xl p-6 shadow-xl space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-amber-400" />
+                  Riwayat & Antrean Shorts Islamic
+                </h3>
+                <span className="text-xs text-slate-400">
+                  Total: {shortsQueue.filter((s) => s.niche === "Islamic").length} Video
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs text-slate-300">
+                  <thead className="bg-[#141a2e] text-slate-400 uppercase font-bold text-[10px] tracking-wider border-b border-slate-800">
+                    <tr>
+                      <th className="py-3 px-4">Judul & Cover</th>
+                      <th className="py-3 px-4">Style & Source</th>
+                      <th className="py-3 px-4">Status Render</th>
+                      <th className="py-3 px-4">Tinjau di Telegram</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 font-medium">
+                    {shortsQueue
+                      .filter((s) => s.niche === "Islamic")
+                      .map((item) => (
+                        <tr key={item.id} className="hover:bg-slate-800/30">
+                          <td className="py-3 px-4">
+                            <div className="font-bold text-white">{item.title}</div>
+                            <div className="text-[10px] text-slate-400 mt-0.5">
+                              {item.hook_text}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="bg-amber-500/10 text-amber-400 font-semibold px-2 py-0.5 rounded border border-amber-500/20">
+                              {item.style_preset || "Z-Code Style"}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span
+                              className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                                item.status === "Review_in_Telegram"
+                                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                                  : "bg-blue-500/20 text-blue-400 border border-blue-500/30"
+                              }`}
+                            >
+                              {item.status}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            {item.telegram_message_url ? (
+                              <a
+                                href={item.telegram_message_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-amber-400 hover:underline flex items-center gap-1 font-bold"
+                              >
+                                <span>Buka Video</span>
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </a>
+                            ) : (
+                              <span className="text-slate-500">Terkirim ke Bot</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    {shortsQueue.filter((s) => s.niche === "Islamic").length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="py-8 text-center text-slate-500">
+                          Belum ada antrean Shorts Islamic. Drag & drop video di atas untuk memulai!
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ===================================================================
+            TAB 2: SHORTS EDUKASI (AI SCRIPT & 5-SCENE BREAKDOWN GENERATOR)
+            =================================================================== */}
+        {activeTab === "edukasi" && (
+          <div className="max-w-6xl mx-auto w-full space-y-8 animate-fadeIn">
+            {/* Header Edukasi */}
+            <div className="flex items-start justify-between border-b border-slate-800 pb-5">
+              <div>
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-teal-500/10 border border-teal-500/30 rounded-xl">
+                    <GraduationCap className="w-6 h-6 text-teal-400" />
+                  </div>
                   <div>
-                    <label className="mb-1.5 block text-[11px] text-zinc-400">
-                      Isi Pesan dari Client
+                    <h1 className="text-2xl font-black text-white tracking-wide">
+                      AI Script & 5-Scene Generator (Shorts Edukasi)
+                    </h1>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Riset Otomatis Topik Sains/Misteri Viral ➔ Naskah Lengkap ➔ Breakdown Scene-by-Scene untuk Remotion
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* AI Generator Form */}
+            <div className="bg-[#0f1424] border border-slate-800/90 rounded-2xl p-6 shadow-xl space-y-6">
+              <form onSubmit={handleGenerateEdukasiScript} className="space-y-5">
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
+                  <div className="md:col-span-8">
+                    <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
+                      Topik atau Ide Edukasi (Kosongkan jika ingin AI yang memilih topik viral)
                     </label>
-                    <textarea
-                      rows={3}
-                      placeholder="Contoh: Bang, mau tanya harga jasanya dong, kalau order hari ini bisa?"
-                      value={simMessage}
-                      onChange={(e) => setSimMessage(e.target.value)}
-                      className="w-full rounded-xl border border-white/[0.08] bg-black/50 p-3 text-xs text-white placeholder-zinc-600 focus:border-white/25 focus:outline-none"
+                    <input
+                      type="text"
+                      value={edukasiTopic}
+                      onChange={(e) => setEdukasiTopic(e.target.value)}
+                      placeholder="Contoh: Misteri Lubang Hitam, Segitiga Bermuda, Rahasia Otak Manusia..."
+                      className="w-full bg-[#161c30] border border-slate-700/80 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-teal-400"
                     />
                   </div>
 
-                  <button
-                    type="submit"
-                    disabled={isSendingChat}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/15 py-2.5 text-xs font-medium text-emerald-200 hover:bg-emerald-500/25 transition"
-                  >
-                    <Send className="h-3.5 w-3.5" />
-                    <span>
-                      {isSendingChat
-                        ? "Memproses Balasan & Mengirim ke Telegram..."
-                        : "Tes Balas Otomatis + Kirim Alert ke Telegram"}
+                  <div className="md:col-span-4">
+                    <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
+                      Target Durasi Video
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(["1m", "1.5m", "2m"] as const).map((d) => (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => setEdukasiDuration(d)}
+                          className={`py-3 text-xs font-black rounded-xl border transition-all ${
+                            edukasiDuration === d
+                              ? "bg-teal-500/20 text-teal-300 border-teal-400 shadow-md shadow-teal-500/20"
+                              : "bg-[#161c30] text-slate-400 border-slate-700/80 hover:text-white"
+                          }`}
+                        >
+                          {d === "1m" ? "1 Menit" : d === "1.5m" ? "1.5 Menit" : "2 Menit"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick Topic Chips */}
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <span className="text-[11px] font-bold text-slate-400">Rekomendasi Cepat:</span>
+                  {[
+                    "Misteri Lubang Hitam (Black Hole)",
+                    "Tardigrade: Hewan Paling Mustahil Mati",
+                    "Rahasia Palung Mariana Terdalam",
+                    "Kenapa Kebakaran Gambut Tak Bisa Padam?",
+                  ].map((chip) => (
+                    <button
+                      key={chip}
+                      type="button"
+                      onClick={() => setEdukasiTopic(chip)}
+                      className="text-[11px] bg-slate-800/80 hover:bg-slate-700 text-teal-300 px-3 py-1 rounded-full border border-teal-500/20 transition-all"
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Generate Button */}
+                <button
+                  type="submit"
+                  disabled={isGeneratingEdukasi}
+                  className="w-full bg-gradient-to-r from-teal-500 via-emerald-500 to-teal-600 hover:from-teal-600 hover:to-emerald-600 text-slate-950 font-black py-4 rounded-xl shadow-xl shadow-teal-500/20 text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                >
+                  {isGeneratingEdukasi ? (
+                    <>
+                      <RefreshCw className="w-5 h-5 animate-spin" />
+                      <span>Sedang Meriset & Menulis 5 Scene Breakdown...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-5 h-5 fill-slate-950" />
+                      <span>Generate Naskah Lengkap & 5 Scene Breakdown</span>
+                    </>
+                  )}
+                </button>
+              </form>
+            </div>
+
+            {/* Generated Script & 5 Scene Breakdown Display */}
+            {generatedScriptData && (
+              <div className="bg-[#0f1424] border border-teal-500/40 rounded-2xl p-6 shadow-2xl space-y-6 animate-fadeIn">
+                <div className="flex items-start justify-between border-b border-slate-800 pb-4">
+                  <div>
+                    <span className="bg-teal-500/10 text-teal-400 font-bold text-xs px-3 py-1 rounded-full border border-teal-500/30 uppercase tracking-wider">
+                      Hasil Riset AI · Siap Produksi
                     </span>
-                  </button>
-                </form>
+                    <h2 className="text-xl font-black text-white mt-2">
+                      {generatedScriptData.title}
+                    </h2>
+                    <p className="text-xs text-amber-400 font-semibold mt-1">
+                      🪝 Hook: "{generatedScriptData.hook_text}"
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xs font-mono text-slate-400">
+                      Est. Durasi: {generatedScriptData.target_duration_seconds || 90} Detik
+                    </span>
+                  </div>
+                </div>
+
+                {/* Full Narration Accordion */}
+                <div className="bg-[#141a2e] border border-slate-800 rounded-xl p-4">
+                  <div className="text-xs font-bold text-teal-300 uppercase tracking-wider mb-2">
+                    Naskah Narasi Lengkap (Untuk Voiceover):
+                  </div>
+                  <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-line font-serif">
+                    {generatedScriptData.full_script}
+                  </p>
+                </div>
+
+                {/* 5 Scene Breakdown Cards */}
+                <div className="space-y-4">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-teal-400" />
+                    Breakdown 5 Scene Terstruktur (Shot & Motion Direction):
+                  </h3>
+
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                    {generatedScriptData.scenes?.map((sc) => (
+                      <div
+                        key={sc.scene_num}
+                        className="bg-[#14192b] border border-slate-800 hover:border-teal-500/50 rounded-xl p-4 flex flex-col justify-between space-y-3 transition-all"
+                      >
+                        <div>
+                          <div className="flex items-center justify-between text-xs font-black mb-2">
+                            <span className="bg-teal-500/20 text-teal-300 px-2 py-0.5 rounded text-[10px]">
+                              SCENE {sc.scene_num}
+                            </span>
+                            <span className="text-slate-400 font-mono text-[10px]">
+                              {sc.time_range}
+                            </span>
+                          </div>
+                          <div className="text-xs font-bold text-white mb-1">
+                            {sc.visual_direction}
+                          </div>
+                          <p className="text-[11px] text-slate-300 line-clamp-4 leading-relaxed">
+                            "{sc.narration}"
+                          </p>
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-800/80 space-y-1">
+                          <div className="text-[10px] text-amber-300 font-mono">
+                            ⚡ {sc.motion_fx}
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono">
+                            🔊 {sc.sound_fx}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Drag and Drop Footage Mentah User untuk di-Remotion */}
+                <div className="pt-4 border-t border-slate-800">
+                  <div className="bg-gradient-to-r from-teal-950/40 to-slate-900 border border-teal-500/30 rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-5">
+                    <div>
+                      <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                        <UploadCloud className="w-5 h-5 text-teal-400" />
+                        Punya Footage Mentah (Google Flow AI / Gemini Pro)?
+                      </h4>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Drop video rekaman Anda ke sini, AI laptop lokal akan menambahkan animasi Remotion, kinetic subtitle, dan audio mixing otomatis!
+                      </p>
+                    </div>
+
+                    <label className="bg-teal-500 hover:bg-teal-600 text-slate-950 font-black px-5 py-3 rounded-xl cursor-pointer text-xs shrink-0 flex items-center gap-2 shadow-lg">
+                      <FileVideo className="w-4 h-4 fill-slate-950" />
+                      <span>{edukasiFootageFile ? edukasiFootageFile.name : "Drop / Pilih Footage"}</span>
+                      <input
+                        type="file"
+                        accept="video/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          if (e.target.files?.[0]) {
+                            setEdukasiFootageFile(e.target.files[0]);
+                            notify("Footage dipilih! Klik 'Rakit Video' untuk eksekusi.");
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ===================================================================
+            TAB 3: CS AUTO RESPONDER (INSTAGRAM DM LIVE CHAT HISTORY ONLY)
+            =================================================================== */}
+        {activeTab === "responder" && (
+          <div className="max-w-6xl mx-auto w-full space-y-8 animate-fadeIn">
+            {/* Header CS */}
+            <div className="flex items-start justify-between border-b border-slate-800 pb-5">
+              <div>
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-pink-500/10 border border-pink-500/30 rounded-xl">
+                    <MessageSquare className="w-6 h-6 text-pink-400" />
+                  </div>
+                  <div>
+                    <h1 className="text-2xl font-black text-white tracking-wide">
+                      Riwayat Chat Masuk Instagram DM (CS Automation)
+                    </h1>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Koneksi Aktif:{" "}
+                      <span className="text-pink-400 font-bold">@at.heart_digital</span> &{" "}
+                      <span className="text-slate-300 font-bold">BelajarCeriaAnak.id</span> · Balas Otomatis AI & Alert Telegram
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span className="text-xs font-bold text-emerald-400">Webhook Live</span>
               </div>
             </div>
 
-            {/* Right Column: Unified Social Inbox */}
-            <div className="lg:col-span-7">
-              <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-6 backdrop-blur-2xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]">
-                <div className="mb-5 flex items-center justify-between">
-                  <div>
-                    <h2 className="text-sm font-semibold text-white">
-                      Kotak Masuk Terpadu (Instagram & TikTok)
-                    </h2>
-                    <p className="text-xs text-zinc-400">
-                      Semua client yang nge-chat otomatis dijawab oleh AI dan
-                      diteruskan ke Telegram pribadi kamu.
-                    </p>
-                  </div>
-                  <span className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-zinc-300">
-                    Webhook: /api/social-webhook
-                  </span>
+            {/* Quick Metrics Bar */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-[#0f1424] border border-slate-800/90 rounded-2xl p-4">
+                <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  Total DM Masuk
                 </div>
-
-                <div className="space-y-4">
-                  {socialChats.map((chat) => (
-                    <div
-                      key={chat.id}
-                      className="rounded-xl border border-white/[0.07] bg-black/35 p-4 transition hover:border-white/[0.14]"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] pb-3">
-                        <div className="flex items-center gap-2.5">
-                          <span className="rounded-md border border-white/15 bg-white/[0.06] px-2.5 py-0.5 text-[11px] font-medium text-white">
-                            {chat.platform}
-                          </span>
-                          <span className="text-xs font-semibold text-zinc-100">
-                            {chat.sender_handle}
-                          </span>
-                          <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-0.5 text-[11px] text-zinc-400">
-                            {chat.intent_category.replace("_", " ")}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 text-[11px] text-emerald-400">
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                          <span>
-                            Dibalas {chat.response_time_sec}s · Notif Telegram
-                            Terkirim
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Incoming Client Message */}
-                      <div className="mt-3 text-xs text-zinc-300">
-                        <span className="block text-[11px] font-medium text-zinc-500">
-                          Pesan Client:
-                        </span>
-                        <p className="mt-1 rounded-lg border border-white/[0.05] bg-white/[0.02] p-2.5 text-zinc-200">
-                          &ldquo;{chat.incoming_message}&rdquo;
-                        </p>
-                      </div>
-
-                      {/* AI Auto-Reply */}
-                      <div className="mt-3 text-xs">
-                        <span className="flex items-center gap-1.5 text-[11px] font-medium text-zinc-400">
-                          <CornerDownRight className="h-3 w-3 text-emerald-400" />
-                          Balasan Otomatis AI:
-                        </span>
-                        <p className="mt-1 rounded-lg border border-emerald-500/15 bg-emerald-500/[0.04] p-2.5 text-zinc-200 leading-relaxed">
-                          {chat.ai_auto_reply}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
+                <div className="text-2xl font-black text-white mt-1">
+                  {socialChats.length} Pesan
                 </div>
               </div>
+              <div className="bg-[#0f1424] border border-slate-800/90 rounded-2xl p-4">
+                <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  Respon Otomatis AI
+                </div>
+                <div className="text-2xl font-black text-emerald-400 mt-1">
+                  100% Terbalas
+                </div>
+              </div>
+              <div className="bg-[#0f1424] border border-slate-800/90 rounded-2xl p-4">
+                <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  Kecepatan Balas
+                </div>
+                <div className="text-2xl font-black text-pink-400 mt-1">
+                  &lt; 2.0 Detik
+                </div>
+              </div>
+              <div className="bg-[#0f1424] border border-slate-800/90 rounded-2xl p-4">
+                <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  Telegram Owner Alert
+                </div>
+                <div className="text-2xl font-black text-teal-400 mt-1">
+                  Aktif 24/7
+                </div>
+              </div>
+            </div>
+
+            {/* Search and Filters */}
+            <div className="bg-[#0f1424] border border-slate-800/90 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="relative w-full sm:w-80">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchHandle}
+                  onChange={(e) => setSearchHandle(e.target.value)}
+                  placeholder="Cari Username @instagram..."
+                  className="w-full bg-[#161c30] border border-slate-700/80 rounded-xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-pink-400"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button
+                  onClick={() => setChatFilter("all")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    chatFilter === "all"
+                      ? "bg-pink-500/20 text-pink-300 border border-pink-500/30"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  Semua ({socialChats.length})
+                </button>
+                <button
+                  onClick={() => setChatFilter("replied")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    chatFilter === "replied"
+                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  Terbalas AI
+                </button>
+              </div>
+            </div>
+
+            {/* Live Chat Cards List */}
+            <div className="space-y-4">
+              {filteredChats.map((chat) => (
+                <div
+                  key={chat.id}
+                  className="bg-[#0f1424] border border-slate-800/90 hover:border-pink-500/30 rounded-2xl p-5 shadow-lg space-y-4 transition-all"
+                >
+                  {/* Sender Header */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-pink-500 to-amber-500 p-0.5">
+                        <div className="w-full h-full bg-[#0f1424] rounded-full flex items-center justify-center font-bold text-xs text-pink-400">
+                          {chat.sender_name.slice(0, 2).toUpperCase()}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-sm font-black text-white flex items-center gap-2">
+                          <span>{chat.sender_handle}</span>
+                          <span className="bg-pink-500/10 text-pink-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-pink-500/20">
+                            Instagram DM
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">
+                          Nama: {chat.sender_name} · Real Client
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="bg-emerald-500/10 text-emerald-400 text-[10px] font-bold px-2.5 py-1 rounded-full border border-emerald-500/20 flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" />
+                        <span>Terkirim ke Telegram</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Messages Exchange */}
+                  <div className="space-y-3 bg-[#141a2e] border border-slate-800 rounded-xl p-4">
+                    {/* Client Message */}
+                    <div className="flex items-start gap-3">
+                      <div className="bg-slate-700 text-slate-300 font-bold text-[10px] px-2 py-1 rounded shrink-0">
+                        CLIENT
+                      </div>
+                      <p className="text-xs text-white leading-relaxed font-medium">
+                        "{chat.incoming_message}"
+                      </p>
+                    </div>
+
+                    {/* AI Auto-Reply */}
+                    {chat.ai_auto_reply && (
+                      <div className="flex items-start gap-3 pt-2 border-t border-slate-800">
+                        <div className="bg-gradient-to-r from-pink-600 to-rose-600 text-white font-bold text-[10px] px-2 py-1 rounded shrink-0 flex items-center gap-1">
+                          <Zap className="w-3 h-3 fill-white" />
+                          <span>AI CS</span>
+                        </div>
+                        <p className="text-xs text-pink-200 leading-relaxed font-medium">
+                          "{chat.ai_auto_reply}"
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {filteredChats.length === 0 && (
+                <div className="bg-[#0f1424] border border-slate-800 rounded-2xl p-12 text-center text-slate-500 text-xs">
+                  Tidak ada riwayat chat yang cocok dengan pencarian Anda.
+                </div>
+              )}
             </div>
           </div>
         )}
 
         {/* ===================================================================
-            TAB 2: YOUTUBE SHORTS FACTORY (SEPARATED NICHE WORKSPACES)
-        =================================================================== */}
-        {activeTab === "shorts" && (
-          <div className="space-y-6">
-            {/* Top Niche Sub-Navigation Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-5 backdrop-blur-2xl">
-              <div>
-                <h2 className="text-sm font-semibold text-white">
-                  Pusat Produksi YouTube Shorts Multi-Niche
-                </h2>
-                <p className="mt-0.5 text-xs text-zinc-400">
-                  Pilih niche di samping untuk fokus memantau referensi dan progres video masing-masing channel.
-                </p>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                {[
-                  {
-                    id: "Edukasi_CalonSarjana",
-                    label: "🎓 Edukasi (Calon Sarjana)",
-                    badge: "Auto-Pilot AI",
-                  },
-                  {
-                    id: "Islamic",
-                    label: "🕌 Islami (Target 1K Subs)",
-                    badge: "Channel Pribadi",
-                  },
-                  {
-                    id: "Gaming_Roblox_Minecraft",
-                    label: "🎮 Kids (Roblox/Minecraft)",
-                    badge: "Auto-Pilot AI",
-                  },
-                  {
-                    id: "ALL",
-                    label: "📂 Semua Niche",
-                    badge: `${shortsQueue.length}`,
-                  },
-                ].map((n) => (
-                  <button
-                    key={n.id}
-                    onClick={() => setSelectedNiche(n.id)}
-                    className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-medium transition ${
-                      selectedNiche === n.id
-                        ? "border border-emerald-500/40 bg-emerald-500/20 text-emerald-200 shadow-md"
-                        : "border border-white/10 bg-white/[0.03] text-zinc-400 hover:bg-white/[0.08] hover:text-white"
-                    }`}
-                  >
-                    <span>{n.label}</span>
-                    <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-zinc-300">
-                      {n.badge}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* NICHE 1: EDUKASI CALON SARJANA SPECIALIZED WORKSPACE */}
-            {selectedNiche === "Edukasi_CalonSarjana" && (
-              <div className="space-y-6">
-                {/* Hero Auto-Pilot Card for Edukasi */}
-                <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.04] p-6 backdrop-blur-2xl shadow-[inset_0_1px_0_0_rgba(16,185,129,0.15)]">
-                  <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="rounded-full border border-emerald-500/30 bg-emerald-500/15 px-3 py-0.5 text-xs font-semibold text-emerald-300">
-                          Auto-Pilot Aktif 100%
-                        </span>
-                        <span className="text-xs text-zinc-400">
-                          Durasi 1–2 Menit · Format 9:16 Shorts
-                        </span>
-                      </div>
-                      <h3 className="mt-2 text-lg font-bold text-white">
-                        Pabrik Video Edukasi & Fakta Unik (Gaya Calon Sarjana)
-                      </h3>
-                      <p className="mt-1 max-w-2xl text-xs text-zinc-300 leading-relaxed">
-                        Kamu tidak perlu memikirkan judul atau mencari video. Cukup klik tombol di samping: AI otomatis mencari fakta viral, menyusun hook memikat, merekam suara narator enerjik (Edge-TTS Ardi), dan merakit klip cepat 2.5s + SFX whoosh via laptopmu!
-                      </p>
-                    </div>
-
-                    <button
-                      onClick={() => handleAiAutoGenerateShorts("Edukasi_CalonSarjana")}
-                      disabled={isGeneratingShorts}
-                      className="flex items-center gap-2.5 rounded-xl border border-emerald-400 bg-emerald-500 px-6 py-3.5 text-sm font-semibold text-black shadow-xl shadow-emerald-500/20 hover:bg-emerald-400 active:scale-95 transition disabled:opacity-50"
-                    >
-                      <Sparkles className={`h-4 w-4 ${isGeneratingShorts ? "animate-spin" : ""}`} />
-                      <span>
-                        {isGeneratingShorts
-                          ? "AI Sedang Riset & Tulis Naskah..."
-                          : "⚡ AI Otomatis: Buat 1 Video Edukasi Hari Ini"}
-                      </span>
-                    </button>
-                  </div>
-
-                  {/* Reference & Customization Controls */}
-                  <div className="mt-6 grid grid-cols-1 gap-4 border-t border-emerald-500/15 pt-5 sm:grid-cols-2">
-                    <div>
-                      <label className="block text-[11px] font-medium text-zinc-400">
-                        Link Channel / Video Referensi Gaya Calon Sarjana:
-                      </label>
-                      <input
-                        type="text"
-                        value={edukasiRefUrl}
-                        onChange={(e) => setEdukasiRefUrl(e.target.value)}
-                        placeholder="https://www.youtube.com/@CalonSarjanaOfficial"
-                        className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/60 px-3.5 py-2.5 text-xs text-zinc-200 placeholder-zinc-600 focus:border-emerald-500/50 focus:outline-none"
-                      />
-                      <p className="mt-1 text-[10px] text-zinc-500">
-                        Gaya yang ditiru: Fast cut tiap 2.5 detik, Motion data/angka (Hyperframes), SFX Whoosh/Suspense.
-                      </p>
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-medium text-zinc-400">
-                        Punya Topik Khusus? (Opsional, kosongkan jika mau AI yang menentukan):
-                      </label>
-                      <input
-                        type="text"
-                        value={edukasiTopicInput}
-                        onChange={(e) => setEdukasiTopicInput(e.target.value)}
-                        placeholder="Misal: 3 Fakta Gila Segitiga Bermuda (Boleh dikosongkan)"
-                        className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/60 px-3.5 py-2.5 text-xs text-zinc-200 placeholder-zinc-600 focus:border-emerald-500/50 focus:outline-none"
-                      />
-                      <p className="mt-1 text-[10px] text-zinc-500">
-                        Jika dikosongkan, AI Groq akan memilih topik sains/fakta misteri terpopuler secara acak.
-                      </p>
-                    </div>
-                  </div>
+            TAB 4: STATUS SISTEM & INTEGRASI
+            =================================================================== */}
+        {activeTab === "settings" && (
+          <div className="max-w-6xl mx-auto w-full space-y-8 animate-fadeIn">
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-slate-800 pb-5">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-blue-500/10 border border-blue-500/30 rounded-xl">
+                  <Sliders className="w-6 h-6 text-blue-400" />
                 </div>
-
-                {/* Info Box: Mekanisme Render Laptop */}
-                <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 text-xs text-zinc-300">
-                  <div className="flex items-center gap-2 font-semibold text-white">
-                    <Terminal className="h-4 w-4 text-emerald-400" />
-                    <span>Mekanisme Render di Laptop Kamu:</span>
-                  </div>
-                  <p className="mt-1 text-zinc-400">
-                    Setelah tombol diklik, naskah akan masuk ke status <code className="text-emerald-300">Queued_For_Laptop</code>. Begitu kamu menjalankan skrip <code className="text-zinc-200">shorts_factory_worker.py</code> di laptop, video otomatis dirender menggunakan chip <strong>Intel Iris Xe</strong> dan langsung dikirimkan ke <strong>Bot Telegram kamu</strong> untuk ditonton!
+                <div>
+                  <h1 className="text-2xl font-black text-white tracking-wide">
+                    Status Sistem & Integrasi Real-Time
+                  </h1>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Koneksi Vercel Production, Supabase Cloud, Local Laptop Bridge, dan Telegram Bot
                   </p>
                 </div>
               </div>
-            )}
-
-            {/* NICHE 2: ISLAMIC WORKSPACE */}
-            {selectedNiche === "Islamic" && (
-              <div className="rounded-2xl border border-amber-500/25 bg-amber-500/[0.04] p-6 backdrop-blur-2xl">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div>
-                    <span className="rounded-full border border-amber-500/30 bg-amber-500/15 px-3 py-0.5 text-xs font-semibold text-amber-300">
-                      Channel Pribadi Kamu (400 ➔ 1.000 Subs)
-                    </span>
-                    <h3 className="mt-2 text-lg font-bold text-white">
-                      Pabrik Video Islami & Doa Mustajab
-                    </h3>
-                    <p className="mt-1 max-w-2xl text-xs text-zinc-300 leading-relaxed">
-                      Meniru gaya editan asli channel kamu: Subtitle Karaoke Emas, transisi halus, warm color grading, dan audio latar yang mengecil otomatis (*auto-ducking*). Kamu yang menentukan judul/tema sesuai syariat.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => handleAiAutoGenerateShorts("Islamic")}
-                    disabled={isGeneratingShorts}
-                    className="flex items-center gap-2.5 rounded-xl border border-amber-400 bg-amber-500 px-6 py-3.5 text-sm font-semibold text-black shadow-xl hover:bg-amber-400 transition disabled:opacity-50"
-                  >
-                    <Sparkles className="h-4 w-4" />
-                    <span>Generate Naskah Islami Hari Ini</span>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* NICHE 3: KIDS GAMING WORKSPACE */}
-            {selectedNiche === "Gaming_Roblox_Minecraft" && (
-              <div className="rounded-2xl border border-cyan-500/25 bg-cyan-500/[0.04] p-6 backdrop-blur-2xl">
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div>
-                    <span className="rounded-full border border-cyan-500/30 bg-cyan-500/15 px-3 py-0.5 text-xs font-semibold text-cyan-300">
-                      Auto-Pilot Gaming Anak
-                    </span>
-                    <h3 className="mt-2 text-lg font-bold text-white">
-                      Pabrik Konten Roblox & Minecraft
-                    </h3>
-                    <p className="mt-1 max-w-2xl text-xs text-zinc-300 leading-relaxed">
-                      AI otomatis meriset rahasia map Brookhaven / Minecraft, membuat subtitle membal-membal (*bouncy pop-up*), efek zoom shake, dan SFX meme ramah anak.
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => handleAiAutoGenerateShorts("Gaming_Roblox_Minecraft")}
-                    disabled={isGeneratingShorts}
-                    className="flex items-center gap-2.5 rounded-xl border border-cyan-400 bg-cyan-500 px-6 py-3.5 text-sm font-semibold text-black shadow-xl hover:bg-cyan-400 transition disabled:opacity-50"
-                  >
-                    <Sparkles className="h-4 w-4" />
-                    <span>⚡ AI Otomatis: Buat 1 Video Gaming Hari Ini</span>
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* List of Shorts Projects in Selected Niche */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h4 className="text-sm font-semibold text-white">
-                  Daftar Antrean & Riwayat Render (
-                  {selectedNiche === "ALL"
-                    ? "Semua Niche"
-                    : getNicheLabel(selectedNiche as ShortsItem["niche"])}
-                  ):
-                </h4>
-                <span className="text-xs text-zinc-500">
-                  {filteredShorts.length} Video Terdaftar
-                </span>
-              </div>
-
-                {/* Project Cards */}
-                {filteredShorts.map((item) => (
-                  <div
-                    key={item.id}
-                    className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-6 backdrop-blur-2xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-white/[0.06] pb-4">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="rounded-md border border-white/15 bg-white/[0.05] px-2.5 py-0.5 text-[11px] font-medium text-zinc-200">
-                            {getNicheLabel(item.niche)}
-                          </span>
-                          <span className="rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-300">
-                            Versi Render v{item.revision_version}
-                          </span>
-                          <span className="text-[11px] text-zinc-500">
-                            {item.status.replace(/_/g, " ")}
-                          </span>
-                        </div>
-                        <h3 className="mt-2 text-sm font-semibold text-white">
-                          {item.title}
-                        </h3>
-                      </div>
-
-                      {item.telegram_message_url && (
-                        <a
-                          href={item.telegram_message_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/[0.06] px-3 py-1.5 text-xs font-medium text-zinc-100 hover:bg-white/[0.12] transition"
-                        >
-                          <span>Cek Video di Telegram</span>
-                          <ExternalLink className="h-3 w-3" />
-                        </a>
-                      )}
-                    </div>
-
-                    {/* Reference & Style Specs */}
-                    <div className="mt-4 grid grid-cols-1 gap-3 rounded-xl border border-white/[0.06] bg-black/35 p-3.5 text-xs sm:grid-cols-2">
-                      <div>
-                        <span className="block text-[11px] text-zinc-500">
-                          Video Referensi (ReelMimic Source):
-                        </span>
-                        <span className="mt-0.5 block truncate font-mono text-[11px] text-zinc-300">
-                          {item.reference_video_url}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="block text-[11px] text-zinc-500">
-                          Engine Pemroses:
-                        </span>
-                        <span className="mt-0.5 block text-zinc-300">
-                          {item.engine_used}
-                        </span>
-                      </div>
-                      <div className="sm:col-span-2">
-                        <span className="block text-[11px] text-zinc-500">
-                          Gaya Editan, Subtitle, Motion & SFX:
-                        </span>
-                        <span className="mt-0.5 block text-zinc-300">
-                          {item.sfx_and_motion_notes}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Previous Revision Log if any */}
-                    {item.revision_notes && (
-                      <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2.5 text-xs text-zinc-300">
-                        <span className="font-medium text-white">
-                          Catatan Revisi Terakhir (v{item.revision_version}):{" "}
-                        </span>
-                        {item.revision_notes}
-                      </div>
-                    )}
-
-                    {/* Targeted Revision Box */}
-                    <div className="mt-4 pt-3 border-t border-white/[0.06]">
-                      <label className="mb-1.5 block text-[11px] font-medium text-zinc-400">
-                        Kurang Cocok Setelah Cek di Telegram? Tulis Bagian yang
-                        Ingin Direvisi:
-                      </label>
-                      <div className="flex flex-col gap-2 sm:flex-row">
-                        <input
-                          type="text"
-                          placeholder="Contoh: Detik 0:05 ganti transisi zoom lebih cepat, perbesar subtitle, tambah SFX ding..."
-                          value={revisionInputs[item.id] || ""}
-                          onChange={(e) =>
-                            setRevisionInputs((prev) => ({
-                              ...prev,
-                              [item.id]: e.target.value,
-                            }))
-                          }
-                          className="flex-1 rounded-xl border border-white/[0.08] bg-black/50 px-3.5 py-2 text-xs text-white placeholder-zinc-600 focus:border-white/25 focus:outline-none"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleRequestRevision(item)}
-                          className="flex items-center justify-center gap-1.5 rounded-xl border border-white/15 bg-white/[0.07] px-4 py-2 text-xs font-medium text-white hover:bg-white/[0.14] transition shrink-0"
-                        >
-                          <RefreshCw className="h-3.5 w-3.5" />
-                          <span>Render Ulang Revisi</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-        )}
-
-        {/* ===================================================================
-            TAB 3: WORKSPACE KANTOR & OBSIDIAN SECOND BRAIN
-        =================================================================== */}
-        {activeTab === "office" && (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-            <div className="lg:col-span-5">
-              <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-6 backdrop-blur-2xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]">
-                <h2 className="text-sm font-semibold text-white">
-                  Tambah Tugas Kantor / Rangkuman Dokumen
-                </h2>
-                <p className="mt-1 text-xs text-zinc-400">
-                  Dirangkum otomatis menggunakan kompresi Headroom (hemat 60%
-                  kuota) dan disimpan ke brankas Obsidian kamu.
-                </p>
-                <form onSubmit={handleAddOfficeTask} className="mt-4 space-y-3">
-                  <input
-                    type="text"
-                    placeholder="Judul laporan / rapat / dokumen kantor..."
-                    value={newTaskTitle}
-                    onChange={(e) => setNewTaskTitle(e.target.value)}
-                    className="w-full rounded-xl border border-white/[0.08] bg-black/50 px-3.5 py-2.5 text-xs text-white placeholder-zinc-600 focus:border-white/25 focus:outline-none"
-                  />
-                  <button
-                    type="submit"
-                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/15 py-2.5 text-xs font-medium text-emerald-200 hover:bg-emerald-500/25 transition"
-                  >
-                    <FileText className="h-3.5 w-3.5" />
-                    <span>Simpan & Rangkum ke Obsidian</span>
-                  </button>
-                </form>
-              </div>
             </div>
 
-            <div className="lg:col-span-7 space-y-3.5">
-              {officeTasks.map((t) => (
-                <div
-                  key={t.id}
-                  className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-5 backdrop-blur-2xl"
-                >
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-white">
-                      {t.title}
-                    </h3>
-                    <span className="rounded-md border border-white/10 bg-white/[0.04] px-2.5 py-0.5 font-mono text-[11px] text-zinc-400">
-                      {t.obsidian_path}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-xs text-zinc-400">{t.ai_summary}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ===================================================================
-            TAB 4: ARSITEKTUR OTAK AI & ANTREAN EKSEKUSI
-        =================================================================== */}
-        {activeTab === "system" && (
-          <div className="space-y-6">
-            <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-6 backdrop-blur-2xl">
-              <h2 className="text-sm font-semibold text-white">
-                Log Antrean Pekerjaan AI Agent (Cloud Vercel ↔ Laptop Lokal)
-              </h2>
-              <p className="mt-1 text-xs text-zinc-400">
-                Semua perintah kloning referensi video, revisi editan, dan
-                balasan CS tercatat secara transparan.
-              </p>
-              <div className="mt-4 space-y-3">
-                {agentJobs.map((job) => (
-                  <div
-                    key={job.id}
-                    className="flex flex-col justify-between gap-2 rounded-xl border border-white/[0.06] bg-black/35 p-4 text-xs sm:flex-row sm:items-center"
-                  >
+            {/* Connection Cards Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Telegram Bot */}
+              <div className="bg-[#0f1424] border border-slate-800 rounded-2xl p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center font-bold text-blue-400">
+                      TG
+                    </div>
                     <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-semibold text-white">
-                          {job.agent_type}
-                        </span>
-                        <span className="rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-300">
-                          {job.status}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-zinc-400">{job.result_log}</p>
+                      <div className="font-bold text-white text-sm">Telegram Bot Notifikasi</div>
+                      <div className="text-xs text-slate-400 font-mono">@cs_bisnisku_2026_bot</div>
                     </div>
-                    <span className="font-mono text-[11px] text-zinc-500">
-                      {new Date(job.created_at).toLocaleTimeString("id-ID")}
-                    </span>
                   </div>
-                ))}
+                  <span className="bg-emerald-500/20 text-emerald-400 text-xs font-bold px-3 py-1 rounded-full border border-emerald-500/30">
+                    Online (ID: 7885596077)
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Semua video shorts hasil render (Islamic & Edukasi) dan alert chat client masuk otomatis dikirim langsung ke bot ini.
+                </p>
+              </div>
+
+              {/* Local Laptop Bridge */}
+              <div className="bg-[#0f1424] border border-slate-800 rounded-2xl p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center font-bold text-emerald-400">
+                      GPU
+                    </div>
+                    <div>
+                      <div className="font-bold text-white text-sm">Local Laptop Worker</div>
+                      <div className="text-xs text-slate-400 font-mono">MSI Modern 14 (Intel Iris Xe)</div>
+                    </div>
+                  </div>
+                  <span className="bg-emerald-500/20 text-emerald-400 text-xs font-bold px-3 py-1 rounded-full border border-emerald-500/30">
+                    Daemon Standby
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Eksekusi render video 24fps 1080x1920 (Three.js WebGL, Remotion, FFmpeg, Edge-TTS) berjalan 100% lokal di laptop Anda.
+                </p>
+              </div>
+
+              {/* Google Gemini API */}
+              <div className="bg-[#0f1424] border border-slate-800 rounded-2xl p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/30 flex items-center justify-center font-bold text-teal-400">
+                      AI
+                    </div>
+                    <div>
+                      <div className="font-bold text-white text-sm">Google Gemini AI Key</div>
+                      <div className="text-xs text-slate-400 font-mono">AQ.Ab8RN6... (Terkonfigurasi)</div>
+                    </div>
+                  </div>
+                  <span className="bg-teal-500/20 text-teal-300 text-xs font-bold px-3 py-1 rounded-full border border-teal-500/30">
+                    Aktif
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Digunakan untuk meriset topik viral, naskah narasi, dan breakdown 5 scene pada Shorts Edukasi.
+                </p>
+              </div>
+
+              {/* Instagram Meta Business */}
+              <div className="bg-[#0f1424] border border-slate-800 rounded-2xl p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-pink-500/10 border border-pink-500/30 flex items-center justify-center font-bold text-pink-400">
+                      IG
+                    </div>
+                    <div>
+                      <div className="font-bold text-white text-sm">Instagram Meta API</div>
+                      <div className="text-xs text-slate-400 font-mono">@at.heart_digital</div>
+                    </div>
+                  </div>
+                  <span className="bg-pink-500/20 text-pink-300 text-xs font-bold px-3 py-1 rounded-full border border-pink-500/30">
+                    Tersambung
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Izin Meta Business sudah disetujui untuk auto-reply DM dan monitoring pesan masuk real-time.
+                </p>
               </div>
             </div>
           </div>
