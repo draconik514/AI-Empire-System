@@ -1,0 +1,10 @@
+node_modules
+.next
+.agents
+local-agent-bridge
+agents
+supabase
+preview-dashboard-instan.html
+start-dashboard-preview.bat
+.env*
+

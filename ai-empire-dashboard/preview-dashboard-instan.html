@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Operations Console — Glass Edition</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #07080a;
+      color: #f4f4f6;
+    }
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .glass-panel {
+      background: rgba(255, 255, 255, 0.025);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+    }
+    .glass-sub {
+      background: rgba(0, 0, 0, 0.42);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+    }
+    .glass-pill-active {
+      background: rgba(255, 255, 255, 0.09);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
+      color: #ffffff;
+    }
+  </style>
+</head>
+<body class="min-h-screen antialiased selection:bg-emerald-500/20 selection:text-emerald-200 pb-20">
+
+  <!-- Monochromatic Ambient Glass Glow -->
+  <div class="pointer-events-none fixed inset-0 overflow-hidden z-0">
+    <div class="absolute -top-48 left-1/4 h-96 w-96 rounded-full bg-white/[0.03] blur-3xl"></div>
+    <div class="absolute top-1/3 right-1/4 h-96 w-96 rounded-full bg-emerald-500/[0.025] blur-3xl"></div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="fixed bottom-6 right-6 z-50 hidden items-center gap-3 rounded-xl border border-white/15 bg-zinc-900/90 px-5 py-3.5 text-xs font-medium text-zinc-100 shadow-2xl backdrop-blur-2xl">
+    <span class="h-2 w-2 rounded-full bg-emerald-400"></span>
+    <span id="toast-msg">Notifikasi</span>
+  </div>
+
+  <!-- Top Header -->
+  <header class="sticky top-0 z-40 border-b border-white/[0.07] bg-[#07080a]/80 backdrop-blur-2xl">
+    <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-4">
+      <div class="flex items-center gap-3.5">
+        <div class="flex h-9 w-9 items-center justify-center rounded-lg border border-white/15 bg-white/[0.04] text-xs font-semibold text-white">
+          AI
+        </div>
+        <div>
+          <div class="flex items-center gap-2.5">
+            <h1 class="text-sm font-semibold tracking-tight text-white">AI Operations Console</h1>
+            <span class="rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-300">
+              24/7 Cloud Online · Rp 0
+            </span>
+          </div>
+          <p class="text-xs text-zinc-500">Social CS Auto-Responder · ReelMimic Video Studio · Obsidian Memory</p>
+        </div>
+      </div>
+
+      <!-- Navigation Pills -->
+      <nav class="flex items-center gap-1 rounded-xl border border-white/[0.08] bg-white/[0.02] p-1 backdrop-blur-xl">
+        <button onclick="switchTab('responder')" id="tab-btn-responder" class="glass-pill-active rounded-lg px-3.5 py-2 text-xs font-medium transition">
+          CS Auto-Responder (IG & TikTok)
+        </button>
+        <button onclick="switchTab('shorts')" id="tab-btn-shorts" class="rounded-lg px-3.5 py-2 text-xs font-medium text-zinc-400 hover:text-zinc-200 transition">
+          YouTube Studio (ReelMimic & Revisi)
+        </button>
+        <button onclick="switchTab('office')" id="tab-btn-office" class="rounded-lg px-3.5 py-2 text-xs font-medium text-zinc-400 hover:text-zinc-200 transition">
+          Kantor & Obsidian Brain
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="relative z-10 mx-auto max-w-7xl px-6 py-8">
+
+    <!-- Top Metrics Strip -->
+    <div class="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-4">
+      <div class="glass-panel rounded-2xl p-5">
+        <div class="flex items-center justify-between text-xs text-zinc-400">
+          <span>CS Auto-Responder (IG & TikTok)</span>
+          <span class="flex items-center gap-1.5 text-emerald-400">
+            <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>24 Jam
+          </span>
+        </div>
+        <div class="mt-2 flex items-baseline justify-between">
+          <span id="metric-chat-count" class="text-2xl font-semibold tracking-tight text-white">3 Chat</span>
+          <span class="text-xs text-zinc-500">Respon 1.2 detik</span>
+        </div>
+      </div>
+
+      <div class="glass-panel rounded-2xl p-5">
+        <div class="flex items-center justify-between text-xs text-zinc-400">
+          <span>Alert Client ke Telegram Bot</span>
+          <span class="text-zinc-500">Real-Time</span>
+        </div>
+        <div class="mt-2 flex items-baseline justify-between">
+          <span class="text-2xl font-semibold tracking-tight text-white">100% Terkirim</span>
+          <span class="text-xs text-zinc-500">Anti Kehilangan Client</span>
+        </div>
+      </div>
+
+      <div class="glass-panel rounded-2xl p-5">
+        <div class="flex items-center justify-between text-xs text-zinc-400">
+          <span>Pabrik Shorts (ReelMimic Clone)</span>
+          <span class="text-zinc-500">3 Niche</span>
+        </div>
+        <div class="mt-2 flex items-baseline justify-between">
+          <span id="metric-shorts-count" class="text-2xl font-semibold tracking-tight text-white">3 Proyek</span>
+          <span class="text-xs text-zinc-500">Islami · Edukasi · Roblox</span>
+        </div>
+      </div>
+
+      <div class="glass-panel rounded-2xl p-5">
+        <div class="flex items-center justify-between text-xs text-zinc-400">
+          <span>Biaya Kredit / Token AI</span>
+          <span class="text-zinc-500">Cloud Free Tier</span>
+        </div>
+        <div class="mt-2 flex items-baseline justify-between">
+          <span class="text-2xl font-semibold tracking-tight text-emerald-400">Rp 0 / Gratis</span>
+          <span class="text-xs text-zinc-500">Groq + Gemini + TG</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ======================================================================
+         SECTION 1: CS AUTO-RESPONDER (INSTAGRAM & TIKTOK -> TELEGRAM BOT)
+    ======================================================================= -->
+    <section id="section-responder" class="grid grid-cols-1 gap-6 lg:grid-cols-12">
+      <!-- Left: SOP & Simulator -->
+      <div class="space-y-6 lg:col-span-5">
+        <div class="glass-panel rounded-2xl p-6">
+          <div class="mb-3 flex items-center justify-between">
+            <div>
+              <h2 class="text-sm font-semibold text-white">SOP Balasan AI (Tersimpan di Obsidian)</h2>
+              <p class="text-xs text-zinc-400">Aturan cara AI membalas chat client di Instagram & TikTok</p>
+            </div>
+            <span class="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 font-mono text-[11px] text-zinc-300">
+              02-CS-Sosmed/SOP.md
+            </span>
+          </div>
+          <textarea id="sop-input" rows="4" class="glass-sub w-full rounded-xl p-3.5 text-xs leading-relaxed text-zinc-200 focus:border-white/25 focus:outline-none">Jawab sopan & ramah dalam <2 detik. Informasikan kisaran layanan, tanyakan detail kebutuhan/nomor WhatsApp, dan beritahu bahwa alert prioritas sudah dikirim ke Telegram Owner.</textarea>
+          <div class="mt-3 flex items-center justify-between text-[11px] text-zinc-500">
+            <span>Otak AI: Groq Llama-3.3-70B (0 Kredit)</span>
+            <button onclick="showToast('SOP CS berhasil diperbarui & disimpan ke Obsidian Vault.')" class="rounded-lg border border-white/15 bg-white/[0.06] px-3 py-1.5 text-xs font-medium text-white hover:bg-white/[0.12] transition">
+              Simpan SOP
+            </button>
+          </div>
+        </div>
+
+        <div class="glass-panel rounded-2xl p-6">
+          <h2 class="text-sm font-semibold text-white">Uji Coba Chat Client Masuk (IG & TikTok)</h2>
+          <p class="mt-1 text-xs text-zinc-400">Simulasikan saat ada client baru nge-chat ketika kamu sedang sibuk.</p>
+
+          <form onsubmit="handleAddChat(event)" class="mt-4 space-y-3.5">
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="mb-1.5 block text-[11px] text-zinc-400">Platform Sosmed</label>
+                <select id="chat-platform" class="glass-sub w-full rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none">
+                  <option value="Instagram">Instagram DM / Komen</option>
+                  <option value="TikTok">TikTok DM / Komen</option>
+                </select>
+              </div>
+              <div>
+                <label class="mb-1.5 block text-[11px] text-zinc-400">Username Client</label>
+                <input id="chat-handle" type="text" placeholder="@calon_pembeli" class="glass-sub w-full rounded-xl px-3 py-2.5 text-xs text-white placeholder-zinc-600 focus:outline-none" />
+              </div>
+            </div>
+            <div>
+              <label class="mb-1.5 block text-[11px] text-zinc-400">Isi Pesan Masuk dari Client</label>
+              <textarea id="chat-message" rows="3" placeholder="Contoh: Kak, mau tanya harga paketnya dong, kalau pesan sekarang bisa?" class="glass-sub w-full rounded-xl p-3 text-xs text-white placeholder-zinc-600 focus:outline-none"></textarea>
+            </div>
+            <button type="submit" class="w-full rounded-xl border border-emerald-500/30 bg-emerald-500/15 py-2.5 text-xs font-medium text-emerald-200 hover:bg-emerald-500/25 transition">
+              Tes Balas Otomatis + Kirim Notifikasi ke Telegram Bot
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Right: Live Unified Inbox -->
+      <div class="lg:col-span-7">
+        <div class="glass-panel rounded-2xl p-6">
+          <div class="mb-5 flex items-center justify-between">
+            <div>
+              <h2 class="text-sm font-semibold text-white">Riwayat Auto-Reply & Alert Telegram</h2>
+              <p class="text-xs text-zinc-400">Setiap pesan baru langsung dibalas AI dan bunyi di Telegram HP kamu.</p>
+            </div>
+            <span class="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1 font-mono text-[11px] text-zinc-300">
+              Online 24/7
+            </span>
+          </div>
+
+          <div id="chat-list" class="space-y-4"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================================================================
+         SECTION 2: YOUTUBE SHORTS STUDIO (REELMIMIC CLONING + REVISION LOOP)
+    ======================================================================= -->
+    <section id="section-shorts" class="hidden space-y-6">
+      <div class="grid grid-cols-1 gap-6 lg:grid-cols-12">
+        <!-- Left: Create New Cloned Video -->
+        <div class="lg:col-span-5">
+          <div class="glass-panel rounded-2xl p-6">
+            <h2 class="text-sm font-semibold text-white">Clone Gaya Video Referensi (ReelMimic Studio)</h2>
+            <p class="mt-1 text-xs text-zinc-400">
+              Berikan referensi video yang sudah kamu analisis/edit. AI akan meniru gaya subtitle, transisi, motion graphics, & SFX-nya dengan topik/isi baru.
+            </p>
+
+            <form onsubmit="handleAddShort(event)" class="mt-4 space-y-3.5">
+              <div>
+                <label class="mb-1.5 block text-[11px] text-zinc-400">Pilih Niche Spesifik</label>
+                <select id="short-niche" class="glass-sub w-full rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none">
+                  <option value="Islamic">1. Islami (Ikuti Editan 400 Subs Kamu + Upgrade Pro menuju 1K Subs)</option>
+                  <option value="Edukasi_CalonSarjana">2. Edukasi & Fakta Unik (Gaya Calon Sarjana: Motion Graphics + SFX + Overlay)</option>
+                  <option value="Gaming_Roblox_Minecraft">3. Anak Spesifik: Roblox & Minecraft (ReelMimic Video Style Clone)</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="mb-1.5 block text-[11px] text-zinc-400">Judul / Topik Video Baru</label>
+                <input id="short-title" type="text" placeholder="Contoh: 3 Rahasia Tersembunyi di Brookhaven Roblox / Fakta Unik..." class="glass-sub w-full rounded-xl px-3 py-2.5 text-xs text-white placeholder-zinc-600 focus:outline-none" />
+              </div>
+
+              <div>
+                <label class="mb-1.5 block text-[11px] text-zinc-400">Link / File Video Referensi yang Ingin Ditiru Editannya</label>
+                <input id="short-ref" type="text" placeholder="https://youtube.com/shorts/... atau file referensi editanmu" class="glass-sub w-full rounded-xl px-3 py-2.5 text-xs text-white placeholder-zinc-600 focus:outline-none" />
+              </div>
+
+              <div>
+                <label class="mb-1.5 block text-[11px] text-zinc-400">Instruksi Motion, Subtitle, Overlay & Sound Effect</label>
+                <textarea id="short-notes" rows="3" placeholder="Contoh: Ikuti persis gaya subtitle & zoom dari referensi, tambahkan SFX whoosh + overlay angka ala Calon Sarjana..." class="glass-sub w-full rounded-xl p-3 text-xs text-white placeholder-zinc-600 focus:outline-none"></textarea>
+              </div>
+
+              <button type="submit" class="w-full rounded-xl border border-emerald-500/30 bg-emerald-500/15 py-2.5 text-xs font-medium text-emerald-200 hover:bg-emerald-500/25 transition">
+                Clone Gaya Referensi & Kirim Hasil Render ke Telegram
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <!-- Right: Active Video Projects & Revision Loop -->
+        <div class="lg:col-span-7 space-y-4">
+          <div class="glass-panel flex flex-wrap items-center justify-between gap-2 rounded-2xl p-4">
+            <span class="text-xs font-medium text-zinc-300">Filter Niche:</span>
+            <div class="flex flex-wrap gap-1.5">
+              <button onclick="filterShorts('ALL')" class="rounded-lg border border-white/15 bg-white/[0.08] px-3 py-1.5 text-xs font-medium text-white">Semua</button>
+              <button onclick="filterShorts('Islamic')" class="rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-white">Islami (400→1K Subs)</button>
+              <button onclick="filterShorts('Edukasi_CalonSarjana')" class="rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-white">Edukasi (Calon Sarjana)</button>
+              <button onclick="filterShorts('Gaming_Roblox_Minecraft')" class="rounded-lg px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-white">Anak (Roblox & Minecraft)</button>
+            </div>
+          </div>
+
+          <div id="shorts-list" class="space-y-4"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================================================================
+         SECTION 3: KANTOR & PENJELASAN OTAK AI + OBSIDIAN
+    ======================================================================= -->
+    <section id="section-office" class="hidden space-y-6">
+      <div class="glass-panel rounded-2xl p-6">
+        <h2 class="text-sm font-semibold text-white">Fungsi Lapisan Otak AI & Kontribusi Obsidian</h2>
+        <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div class="glass-sub rounded-xl p-4">
+            <h3 class="text-xs font-semibold text-white">1. Obsidian + Local REST API (Memori Jangka Panjang / Otak Kedua)</h3>
+            <p class="mt-1.5 text-xs leading-relaxed text-zinc-400">
+              AI biasa itu "pelupa" setiap ganti sesi chat. Obsidian berperan sebagai <strong>Buku Pedoman & Brankas Ingatan Permanen</strong> di laptopmu: menyimpan SOP harga untuk membalas client IG/TikTok, menyimpan resep gaya editan video 400 subs milikmu, dan menyimpan catatan kerja kantor.
+            </p>
+          </div>
+          <div class="glass-sub rounded-xl p-4">
+            <h3 class="text-xs font-semibold text-white">2. Headroom + Build-AI-Agents-Free (Otak Gratis Rp 0)</h3>
+            <p class="mt-1.5 text-xs leading-relaxed text-zinc-400">
+              Memadatkan teks hingga 60% lebih ringkas lalu mengirimkannya ke API AI Cloud Gratis (Groq Llama-3.3-70B & Gemini Free Tier), sehingga kamu tidak keluar biaya kredit/token dan RAM laptop 8GB tidak terbebani.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    let currentFilter = 'ALL';
+
+    let chats = [
+      {
+        id: 'c1',
+        platform: 'Instagram',
+        handle: '@rizky.store.id',
+        intent: 'Tanya Harga',
+        msg: 'Kak, mau tanya untuk paket jasanya berapa ya? Bisa selesai minggu ini?',
+        reply: 'Halo Kak Rizky! Terima kasih sudah menghubungi kami. Untuk layanan kami bisa selesai dalam 2-3 hari kerja. Boleh info kebutuhan spesifiknya atau nomor WhatsApp aktif? Barusan notifikasi prioritas sudah saya kirimkan ke Telegram Owner agar segera merespon Kakak.',
+        time: '1.1s'
+      },
+      {
+        id: 'c2',
+        platform: 'TikTok',
+        handle: '@nadia_beautycare',
+        intent: 'Siap Order',
+        msg: 'Bang, aku lihat dari TikTok, kalau mau langsung order gimana caranya?',
+        reply: 'Halo Kak Nadia! Untuk pemesanan langsung bisa kami proses hari ini. Boleh tinggalkan nomor WhatsApp aktif Kakak? Alert prioritas sudah masuk ke Telegram Owner kami detik ini juga.',
+        time: '0.9s'
+      }
+    ];
+
+    let shorts = [
+      {
+        id: 's1',
+        niche: 'Islamic',
+        nicheLabel: 'Islami (400 → 1K Subs)',
+        title: '3 Waktu Singkat Saat Doa Tidak Tertolak',
+        ref: 'local://referensi-islami-400subs-master.mp4',
+        engine: 'ReelMimic (analyze.py) + FFmpeg-Skill (h264_qsv)',
+        notes: 'Ikuti gaya editan video 400 subs kamu + upgrade kehalusan transisi zoom, subtitle karaoke, & auto-ducking audio latar.',
+        version: 1,
+        status: 'Siap Dicek di Telegram',
+        lastRev: null
+      },
+      {
+        id: 's2',
+        niche: 'Edukasi_CalonSarjana',
+        nicheLabel: 'Edukasi & Fakta (Gaya Calon Sarjana)',
+        title: '3 Fakta Gila di Dasar Palung Mariana yang Jarang Diketahui!',
+        ref: 'https://youtube.com/shorts/calon-sarjana-ref-style',
+        engine: 'ReelMimic + Hyperframes + FFmpeg-Skill',
+        notes: 'Gaya Calon Sarjana: Motion graphics cepat tiap 2.5 detik, overlay angka/fakta, SFX whoosh/pop/suspense, dan BGM misteri.',
+        version: 2,
+        status: 'Selesai Direvisi (v2 di Telegram)',
+        lastRev: 'Detik 0:04 efek suara whoosh diperkeras & ukuran teks fakta diperbesar 15%.'
+      },
+      {
+        id: 's3',
+        niche: 'Gaming_Roblox_Minecraft',
+        nicheLabel: 'Anak Spesifik: Roblox & Minecraft',
+        title: 'Rahasia Pintu Terlarang di Brookhaven Roblox yang Bikin Kaget!',
+        ref: 'https://youtube.com/shorts/roblox-minecraft-viral-ref',
+        engine: 'ReelMimic (video-clone) + OpenMontage + FFmpeg-Skill',
+        notes: 'Clone persis gaya subtitle membal (bouncy), letak zoom/shake, dan timing SFX lucu dari referensi Roblox/Minecraft, dengan isi gameplay baru.',
+        version: 1,
+        status: 'Siap Dicek di Telegram',
+        lastRev: null
+      }
+    ];
+
+    function showToast(text) {
+      const el = document.getElementById('toast');
+      document.getElementById('toast-msg').innerText = text;
+      el.classList.remove('hidden');
+      el.classList.add('flex');
+      setTimeout(() => {
+        el.classList.add('hidden');
+        el.classList.remove('flex');
+      }, 4000);
+    }
+
+    function switchTab(tab) {
+      ['responder', 'shorts', 'office'].forEach(t => {
+        document.getElementById('section-' + t).classList.add('hidden');
+        const btn = document.getElementById('tab-btn-' + t);
+        btn.className = 'rounded-lg px-3.5 py-2 text-xs font-medium text-zinc-400 hover:text-zinc-200 transition';
+      });
+      document.getElementById('section-' + tab).classList.remove('hidden');
+      document.getElementById('tab-btn-' + tab).className = 'glass-pill-active rounded-lg px-3.5 py-2 text-xs font-medium transition';
+    }
+
+    function renderChats() {
+      document.getElementById('metric-chat-count').innerText = chats.length + ' Chat';
+      const container = document.getElementById('chat-list');
+      container.innerHTML = chats.map(c => `
+        <div class="glass-sub rounded-xl p-4">
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] pb-3">
+            <div class="flex items-center gap-2.5">
+              <span class="rounded-md border border-white/15 bg-white/[0.06] px-2.5 py-0.5 text-[11px] font-medium text-white">${c.platform}</span>
+              <span class="text-xs font-semibold text-white">${c.handle}</span>
+              <span class="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-0.5 text-[11px] text-zinc-400">${c.intent}</span>
+            </div>
+            <span class="text-[11px] text-emerald-400">✓ Dibalas ${c.time} · Alert Telegram Terkirim</span>
+          </div>
+          <div class="mt-3 text-xs">
+            <span class="text-[11px] text-zinc-500">Pesan Client:</span>
+            <p class="mt-1 rounded-lg border border-white/[0.05] bg-white/[0.02] p-2.5 text-zinc-200">"${c.msg}"</p>
+          </div>
+          <div class="mt-3 text-xs">
+            <span class="text-[11px] text-emerald-400">↳ Balasan Otomatis AI:</span>
+            <p class="mt-1 rounded-lg border border-emerald-500/15 bg-emerald-500/[0.04] p-2.5 text-zinc-200 leading-relaxed">${c.reply}</p>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function handleAddChat(e) {
+      e.preventDefault();
+      const platform = document.getElementById('chat-platform').value;
+      const rawHandle = document.getElementById('chat-handle').value.trim() || '@client_baru';
+      const handle = rawHandle.startsWith('@') ? rawHandle : '@' + rawHandle;
+      const msg = document.getElementById('chat-message').value.trim();
+      if (!msg) return;
+
+      chats.unshift({
+        id: 'c' + Date.now(),
+        platform,
+        handle,
+        intent: msg.toLowerCase().includes('harga') ? 'Tanya Harga' : 'Prospek Baru',
+        msg,
+        reply: `Halo Kak ${handle.replace('@', '')}! Terima kasih sudah menghubungi kami di ${platform}. Pesan Kakak sudah kami terima dan notifikasi prioritas baru saja dikirim ke Telegram Owner kami. Boleh info detail kebutuhannya atau nomor WhatsApp aktif agar segera kami bantu?`,
+        time: '1.0s'
+      });
+      document.getElementById('chat-handle').value = '';
+      document.getElementById('chat-message').value = '';
+      renderChats();
+      showToast(`Pesan ${platform} dari ${handle} otomatis dibalas & notif masuk ke Telegram Bot!`);
+    }
+
+    function filterShorts(niche) {
+      currentFilter = niche;
+      renderShorts();
+    }
+
+    function renderShorts() {
+      document.getElementById('metric-shorts-count').innerText = shorts.length + ' Proyek';
+      const list = currentFilter === 'ALL' ? shorts : shorts.filter(s => s.niche === currentFilter);
+      const container = document.getElementById('shorts-list');
+      container.innerHTML = list.map(s => `
+        <div class="glass-panel rounded-2xl p-6">
+          <div class="flex flex-wrap items-start justify-between gap-2 border-b border-white/[0.06] pb-3.5">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="rounded-md border border-white/15 bg-white/[0.05] px-2.5 py-0.5 text-[11px] font-medium text-zinc-200">${s.nicheLabel}</span>
+                <span class="rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-300">Render v${s.version}</span>
+                <span class="text-[11px] text-zinc-400">${s.status}</span>
+              </div>
+              <h3 class="mt-2 text-sm font-semibold text-white">${s.title}</h3>
+            </div>
+          </div>
+
+          <div class="mt-3.5 glass-sub rounded-xl p-3.5 text-xs space-y-2">
+            <div>
+              <span class="text-[11px] text-zinc-500">Video Referensi (ReelMimic Target):</span>
+              <span class="block font-mono text-[11px] text-zinc-300 truncate">${s.ref}</span>
+            </div>
+            <div>
+              <span class="text-[11px] text-zinc-500">Gaya Editan, Motion Graphics & SFX:</span>
+              <span class="block text-zinc-300">${s.notes}</span>
+            </div>
+          </div>
+
+          ${s.lastRev ? `
+            <div class="mt-3 rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2.5 text-xs text-zinc-300">
+              <strong class="text-white">Catatan Revisi v${s.version}:</strong> ${s.lastRev}
+            </div>
+          ` : ''}
+
+          <div class="mt-4 pt-3 border-t border-white/[0.06]">
+            <label class="mb-1.5 block text-[11px] text-zinc-400">Ada Bagian yang Kurang Pas Setelah Cek di Telegram? Tulis Revisi:</label>
+            <div class="flex flex-col sm:flex-row gap-2">
+              <input id="rev-input-${s.id}" type="text" placeholder="Contoh: Detik 0:05 tambah efek suara whoosh, perbesar ukuran subtitle..." class="glass-sub flex-1 rounded-xl px-3.5 py-2 text-xs text-white placeholder-zinc-600 focus:outline-none" />
+              <button onclick="submitRevision('${s.id}')" class="rounded-xl border border-white/15 bg-white/[0.08] px-4 py-2 text-xs font-medium text-white hover:bg-white/[0.15] transition shrink-0">
+                Render Ulang Revisi
+              </button>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function handleAddShort(e) {
+      e.preventDefault();
+      const niche = document.getElementById('short-niche').value;
+      const title = document.getElementById('short-title').value.trim();
+      const ref = document.getElementById('short-ref').value.trim() || 'https://youtube.com/shorts/referensi-pilihanmu';
+      const notes = document.getElementById('short-notes').value.trim() || 'Tiru persis gaya subtitle, pacing potongan, motion graphics, dan SFX dari video referensi.';
+      if (!title) return;
+
+      const labels = {
+        Islamic: 'Islami (400 → 1K Subs)',
+        Edukasi_CalonSarjana: 'Edukasi & Fakta (Gaya Calon Sarjana)',
+        Gaming_Roblox_Minecraft: 'Anak Spesifik: Roblox & Minecraft'
+      };
+
+      shorts.unshift({
+        id: 's' + Date.now(),
+        niche,
+        nicheLabel: labels[niche],
+        title,
+        ref,
+        engine: 'ReelMimic + Hyperframes + FFmpeg-Skill',
+        notes,
+        version: 1,
+        status: 'Sedang Cloning Gaya Referensi',
+        lastRev: null
+      });
+
+      document.getElementById('short-title').value = '';
+      document.getElementById('short-ref').value = '';
+      document.getElementById('short-notes').value = '';
+      renderShorts();
+      showToast(`Proyek "${title}" masuk antrean ReelMimic Style Cloning!`);
+    }
+
+    function submitRevision(id) {
+      const inp = document.getElementById('rev-input-' + id);
+      const val = inp.value.trim();
+      if (!val) {
+        showToast('Tulis dulu bagian video yang ingin direvisi.');
+        return;
+      }
+      shorts = shorts.map(s => {
+        if (s.id !== id) return s;
+        return {
+          ...s,
+          version: s.version + 1,
+          status: `Revisi v${s.version + 1} Masuk Antrean Render`,
+          lastRev: val
+        };
+      });
+      renderShorts();
+      showToast('Instruksi revisi dikirim! Versi terbaru akan masuk ke Telegram.');
+    }
+
+    renderChats();
+    renderShorts();
+  </script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+**/node_modules/**
+.pnp
+.pnp.js
+
+# Next.js build output
+.next/
+**/.next/**
+out/
+build/
+dist/
+
+# Vercel
+.vercel/
+**/.vercel/**
+
+# Environment and secrets (CRITICAL: Do not remove)
+.env
+.env*
+*.env
+**/.env*
+*.key
+*.pem
+
+# Python & Virtual Envs
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# External cloned repos (keep them local or clone separately)
+repos-core/
+repos-video/

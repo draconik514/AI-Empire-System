@@ -1,0 +1,28 @@
+{
+  "name": "ai-empire-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Single Command Center Dashboard for 3 Income Streams (Office, UMKM Web Agency, Multi-Niche YouTube Shorts) powered by Supabase, Vercel, Telegram Cloud, and Obsidian.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.48.1",
+    "lucide-react": "^0.475.0",
+    "next": "^15.5.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.5.1",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.3"
+  }
+}
