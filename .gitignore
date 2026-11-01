@@ -48,3 +48,11 @@ desktop.ini
 # External cloned repos (keep them local or clone separately)
 repos-core/
 repos-video/
+
+# Local Video Render Workspace & Temp Media
+render_workspace/
+**/render_workspace/**
+*.mp4
+*.mp3
+*.wav
+

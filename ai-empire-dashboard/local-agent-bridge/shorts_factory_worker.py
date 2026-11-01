@@ -94,17 +94,31 @@ def supabase_update_status(item_id: str, new_status: str, tg_msg_url: str = ""):
 
 def generate_voiceover(text: str, output_audio_path: str, voice: str = "id-ID-ArdiNeural"):
     log(f"🎙️ Merekam suara narator via Edge-TTS ({voice})...")
-    clean_text = text.replace('"', "").replace("'", "")
+    # Tulis naskah ke file sementara agar aman dari karakter khusus & batasan panjang Windows CLI
+    temp_txt = output_audio_path + ".txt"
+    # Bersihkan karakter non-breaking hyphen dan tanda petik
+    clean_text = (
+        text.replace("\u2011", "-")
+        .replace("\u2013", "-")
+        .replace("\u2014", "-")
+        .replace('"', "")
+        .replace("'", "")
+    )
+    with open(temp_txt, "w", encoding="utf-8") as f:
+        f.write(clean_text)
+
     cmd = [
         "edge-tts",
         "--voice",
         voice,
-        "--text",
-        clean_text,
+        "--file",
+        temp_txt,
         "--write-media",
         output_audio_path,
     ]
-    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(cmd, check=True)
+    if os.path.exists(temp_txt):
+        os.remove(temp_txt)
     return os.path.exists(output_audio_path)
 
 
@@ -163,40 +177,49 @@ def render_shorts_video(item: dict) -> str:
     log("🎬 Merender video 9:16 (1080x1920) dengan akselerasi Intel Iris Xe...")
 
     # Filter visual FFmpeg: Gradien bergerak + Header Kategori + Teks Judul + Hook Pembuka
-    # Memakai format font standar sistem Windows (Arial/Segoe UI)
-    safe_title = title.replace(":", " -").replace("'", "").replace('"', "")[:50]
+    safe_title = (
+        title.replace(":", " -")
+        .replace("'", "")
+        .replace('"', "")
+        .encode("ascii", "ignore")
+        .decode("ascii")[:50]
+    )
     safe_badge = badge_text.replace(":", " -")
-    safe_hook = hook.replace(":", " -").replace("'", "")[:80]
+    safe_hook = (
+        hook.replace(":", " -")
+        .replace("'", "")
+        .encode("ascii", "ignore")
+        .decode("ascii")[:75]
+    )
 
     filter_complex = (
         f"color=c={bg_color1}:s=1080x1920:d={duration}[bg];"
         f"[bg]drawbox=y=0:color={bg_color2}@0.85:width=1080:height=1920:t=fill,"
         f"drawbox=y=140:color=white@0.12:width=1000:height=90:t=fill:x=40,"
-        f"drawtext=text='{safe_badge}':font=Arial:fontsize=34:fontcolor={theme_color}:x=(w-text_w)/2:y=168,"
-        f"drawtext=text='{safe_title}':font=Arial:fontsize=52:fontcolor=white:x=(w-text_w)/2:y=280:box=1:boxcolor=black@0.6:boxborderw=20,"
+        f"drawtext=text='{safe_badge}':fontsize=34:fontcolor={theme_color}:x=(w-text_w)/2:y=168,"
+        f"drawtext=text='{safe_title}':fontsize=52:fontcolor=white:x=(w-text_w)/2:y=280:box=1:boxcolor=black@0.6:boxborderw=20,"
         f"drawbox=y=700:color=black@0.75:width=1000:height=520:t=fill:x=40,"
-        f"drawtext=text='HOOK UTAMA\\:':font=Arial:fontsize=36:fontcolor={theme_color}:x=80:y=740,"
-        f"drawtext=text='{safe_hook}':font=Arial:fontsize=46:fontcolor=white:x=80:y=810:fix_bounds=true,"
-        f"drawtext=text='👉 Dengerin sampai akhir!':font=Arial:fontsize=40:fontcolor=yellow:x=(w-text_w)/2:y=1120,"
-        f"drawtext=text='AI-Empire-System 2026':font=Arial:fontsize=28:fontcolor=gray:x=(w-text_w)/2:y=1820[v]"
+        f"drawtext=text='HOOK UTAMA\\:':fontsize=36:fontcolor={theme_color}:x=80:y=740,"
+        f"drawtext=text='{safe_hook}':fontsize=44:fontcolor=white:x=80:y=810:fix_bounds=true,"
+        f"drawtext=text='>> Dengerin sampai akhir!':fontsize=40:fontcolor=yellow:x=(w-text_w)/2:y=1120,"
+        f"drawtext=text='AI-Empire-System 2026':fontsize=28:fontcolor=gray:x=(w-text_w)/2:y=1820[v]"
     )
 
-    # Coba encode via hardware Intel Iris Xe (h264_qsv), jika gagal fallback ke libx264
     cmd = [
         "ffmpeg",
         "-y",
+        "-i",
+        audio_file,
         "-filter_complex",
         filter_complex,
         "-map",
         "[v]",
-        "-i",
-        audio_file,
         "-map",
-        "1:a",
+        "0:a",
         "-c:v",
-        "h264_qsv",
-        "-b:v",
-        "4M",
+        "libx264",
+        "-preset",
+        "ultrafast",
         "-c:a",
         "aac",
         "-b:a",
@@ -205,51 +228,44 @@ def render_shorts_video(item: dict) -> str:
         video_out,
     ]
 
-    try:
-        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except Exception:
-        log("⚠️ QSV hardware encoder sedang sibuk, fallback ke CPU x264...")
-        cmd[11] = "libx264"
-        cmd[12] = "-preset"
-        cmd[13] = "veryfast"
-        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(cmd, check=True)
 
     log(f"✅ Video berhasil di-render: {video_out}")
     return video_out
 
 
 def send_video_to_telegram(video_path: str, item: dict) -> str:
-    log("📤 Mengirim video Shorts ke bot Telegram...")
+    log("📤 Mengirim video Shorts ke bot Telegram via curl.exe...")
     title = item.get("title", "Shorts Video")
     niche = item.get("niche", "Edukasi")
     hook = item.get("hook_text", "")
     version = item.get("revision_version", 1)
 
     caption = (
-        f"🎬 *PREVIEW YOUTUBE SHORTS (v{version})*\n\n"
-        f"🏷️ *Niche:* {niche.replace('_', ' ')}\n"
-        f"📌 *Judul:* {title}\n"
-        f"🪝 *Hook:* \"{hook}\"\n\n"
-        f"📱 *Review:* Tonton video ini langsung di HP kamu. "
-        f"Jika ada yang kurang pas, kamu bisa balas pesan ini untuk meminta revisi!"
+        f"🎬 PREVIEW YOUTUBE SHORTS (v{version})\n\n"
+        f"🏷️ Niche: {niche.replace('_', ' ')}\n"
+        f"📌 Judul: {title}\n"
+        f"🪝 Hook: \"{hook}\"\n\n"
+        f"📱 Tonton langsung video ini di HP. Jika ada bagian yang kurang pas, balas pesan ini untuk minta revisi!"
     )
 
-    # Kirim multipart video via curl / requests
-    # Gunakan powershell curl multipart yang andal di Windows
-    ps_cmd = (
-        f"$uri = 'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendVideo';"
-        f"$form = @{{"
-        f"  chat_id = '{TELEGRAM_CHANNEL_ID}';"
-        f"  caption = @'\n{caption}\n'@;"
-        f"  parse_mode = 'Markdown';"
-        f"  video = Get-Item -Path '{video_path}';"
-        f"}};"
-        f"$res = Invoke-RestMethod -Uri $uri -Method Post -Form $form;"
-        f"Write-Output (ConvertTo-Json $res)"
-    )
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendVideo"
+    cmd = [
+        "curl.exe",
+        "-s",
+        "-X",
+        "POST",
+        url,
+        "-F",
+        f"chat_id={TELEGRAM_CHANNEL_ID}",
+        "-F",
+        f"caption={caption}",
+        "-F",
+        f"video=@{video_path}",
+    ]
 
     try:
-        res = subprocess.run(["powershell", "-Command", ps_cmd], capture_output=True, text=True, check=True)
+        res = subprocess.run(cmd, capture_output=True, text=True, check=True)
         data = json.loads(res.stdout)
         msg_id = data.get("result", {}).get("message_id")
         tg_url = f"https://t.me/c/{TELEGRAM_CHANNEL_ID}/{msg_id}" if msg_id else "https://t.me/"
@@ -288,8 +304,19 @@ if __name__ == "__main__":
     log("=" * 60)
     log("🚀 SHORTS FACTORY WORKER (Divisi 3)")
     log("=" * 60)
-    if len(sys.argv) > 1 and sys.argv[1] == "--once":
-        process_one_job()
+    if len(sys.argv) > 1 and sys.argv[1] == "--loop":
+        log("🔄 Mode Standby/Daemon aktif. Worker memantau antrean Supabase setiap 15 detik...")
+        log("Tekan Ctrl+C untuk berhenti.")
+        while True:
+            try:
+                processed = process_one_job()
+                time.sleep(10 if processed else 15)
+            except KeyboardInterrupt:
+                log("🛑 Worker dihentikan oleh user.")
+                break
+            except Exception as ex:
+                log(f"⚠️ Error tak terduga dalam loop: {ex}")
+                time.sleep(15)
     else:
         log("Menjalankan 1 pemrosesan job antrean...")
         process_one_job()
