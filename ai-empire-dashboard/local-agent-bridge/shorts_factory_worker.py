@@ -174,154 +174,147 @@ def get_audio_duration(audio_path: str) -> float:
 
 
 def build_multi_scene_plan(item: dict, duration: float, words: list) -> dict:
-    """Bangun 6 Scene Dinamis (3D Three.js + Karakter ReelMimic + Callouts + SFX)."""
-    title = item.get("title") or "Fakta Sains Mengejutkan!"
-    s1 = round(duration * 0.16, 2)
-    s2 = round(duration * 0.35, 2)
-    s3 = round(duration * 0.55, 2)
-    s4 = round(duration * 0.74, 2)
-    s5 = round(duration * 0.90, 2)
+    """Bangun 7 Scene Dinamis 3D Three.js + Solo Presenter Cowok (Ren) + Remotion Physics & Consistent Karaoke."""
+    title = item.get("title") or "Makhluk yang Bisa Memutar Balik Usia!"
+    
+    # Deteksi posisi kata kunci untuk timing transisi scene yang presisi
+    def find_word_time(keywords, fallback_ratio):
+        for w in words:
+            clean_w = w.get("text", "").lower().strip(".,!?;:\"'")
+            if any(k in clean_w for k in keywords):
+                return max(1.5, w.get("start", 0.0) - 0.4)
+        return round(duration * fallback_ratio, 2)
+
+    # Identifikasi titik pergantian scene berdasarkan naskah
+    t_transdiff = find_word_time(["stres", "terluka", "menyusut", "polip", "larva"], 0.16)
+    t_mystery = find_word_time(["kenapa", "lautan", "sesak", "teoritis"], 0.35)
+    t_predator = find_word_time(["predator", "dimangsa", "musnah", "ikan"], 0.52)
+    t_disease = find_word_time(["penyakit", "bakteri", "jamur", "infeksi"], 0.67)
+    t_dna = find_word_time(["ilmuwan", "genetika", "dna", "telomer", "kematian"], 0.82)
+    t_cta = find_word_time(["pendapatmu", "komentar", "komen", "manusia"], 0.92)
+
+    # Pastikan urutan waktu selalu menanjak
+    times = sorted(list(set([0.0, t_transdiff, t_mystery, t_predator, t_disease, t_dna, t_cta, duration])))
 
     scenes = [
         {
-            "start": 0.0,
-            "end": s1,
+            "start": times[0],
+            "end": times[1],
             "mode3d": "jellyfish_ocean",
-            "badge": "⚡ HOOK FAKTA SAINS 3D",
+            "badge": "⚡ MISTERI ABADI 3D",
             "badgeColor": "#00F5D4",
-            "headline": title[:62],
-            "char": "both",
+            "headline": "Makhluk yang Bisa Memutar Balik Waktu & Usia!",
+            "action": "hook_question",
             "face": "surprised",
-            "faceHina": "shocked",
-            "fx": "sparkles",
             "sfx": "whoosh-cinematic.mp3",
-            "callouts": [
-                {
-                    "label": "OBJEK PENELITIAN",
-                    "val": "BIOLOGI LAUT 3D",
-                    "x": 250,
-                    "y": 380,
-                    "tx": 520,
-                    "ty": 500,
-                    "color": "#00F5D4",
-                }
-            ],
+            "kpi": {
+                "label": "STATUS BIOLOGIS",
+                "val": "BIOLOGICALLY IMMORTAL",
+                "x": 540,
+                "y": 420,
+            },
         },
         {
-            "start": s1,
-            "end": s2,
-            "mode3d": "microscope_nematocyst",
-            "badge": "🔬 SIMULASI MIKROSKOPIS 3D",
-            "badgeColor": "#FF2A85",
-            "headline": "Apa yang Terjadi di Tingkat Sel Mikroskopis?",
-            "char": "ren",
+            "start": times[1],
+            "end": times[2],
+            "mode3d": "cellular_transdiff",
+            "badge": "🔄 TRANSDIFERENSIASI SEL 3D",
+            "badgeColor": "#4CC9F0",
+            "headline": "Sel Dewasa Berubah Mundur Menjadi Polip Muda!",
+            "action": "explain_science",
             "face": "determined",
-            "fx": "speedLines",
             "sfx": "impact-bass-1.mp3",
-            "callouts": [
-                {
-                    "label": "KAPSUL SEL",
-                    "val": "NEMATOCYST AKTIF",
-                    "x": 250,
-                    "y": 370,
-                    "tx": 500,
-                    "ty": 470,
-                    "color": "#FF2A85",
-                },
-                {
-                    "label": "KECEPATAN TEMBAK",
-                    "val": "5.000.000 G",
-                    "x": 820,
-                    "y": 480,
-                    "tx": 580,
-                    "ty": 660,
-                    "color": "#FFBE0B",
-                },
-            ],
+            "kpi": {
+                "label": "PROSES REVERSIBEL",
+                "val": "MEDUSA ➔ POLIP MUDA",
+                "x": 540,
+                "y": 420,
+            },
         },
         {
-            "start": s2,
-            "end": s3,
-            "mode3d": "myth_explosion",
-            "badge": "❌ MITOS vs TEKANAN OSMOTIK!",
+            "start": times[2],
+            "end": times[3],
+            "mode3d": "jellyfish_ocean",
+            "badge": "❓ KENAPA LAUTAN TAK PENUH?",
+            "badgeColor": "#FFBE0B",
+            "headline": "Kalau Abadi, Kenapa Laut Tidak Penuh Ubur-Ubur?",
+            "action": "explain_science",
+            "face": "determined",
+            "sfx": "whoosh.mp3",
+            "kpi": {
+                "label": "PERTANYAAN BESAR",
+                "val": "DIMANA TITIK LEMAHNYA?",
+                "x": 540,
+                "y": 420,
+            },
+        },
+        {
+            "start": times[3],
+            "end": times[4],
+            "mode3d": "predator_attack",
+            "badge": "⚠️ FAKTOR 1: DIMANGSA PREDATOR",
             "badgeColor": "#FF1E42",
-            "headline": "Awas! Reaksi Tekanan Osmotik Memicu Ledakan Sel!",
-            "char": "hina",
-            "face": "scared",
-            "fx": "focusLines",
+            "headline": "Tewas Seketika Jika Dimangsa Predator Laut!",
+            "action": "predator_recoil",
+            "face": "shocked",
+            "sfx": "impact-sub.mp3",
+            "kpi": {
+                "label": "ANCAMAN ALAMI",
+                "val": "DIMANGSA IKAN & PENYU",
+                "x": 540,
+                "y": 420,
+            },
+        },
+        {
+            "start": times[4],
+            "end": times[5],
+            "mode3d": "disease_infection",
+            "badge": "🦠 FAKTOR 2: TERKENA PENYAKIT",
+            "badgeColor": "#FF2A85",
+            "headline": "Hancur Saat Terserang Infeksi Patogen & Bakteri!",
+            "action": "disease_concern",
+            "face": "sad",
             "sfx": "error.mp3",
-            "callouts": [
-                {
-                    "label": "STATUS SEL",
-                    "val": "KRITIS / MELEDAK!",
-                    "x": 260,
-                    "y": 400,
-                    "tx": 530,
-                    "ty": 560,
-                    "color": "#FF1E42",
-                }
-            ],
+            "kpi": {
+                "label": "INFEKSI SELULAR",
+                "val": "RUSAK TERKENA PATOGEN",
+                "x": 540,
+                "y": 420,
+            },
         },
         {
-            "start": s3,
-            "end": s4,
-            "mode3d": "fact_vinegar_shield",
-            "badge": "✅ FAKTA SAINS & PERTAHANAN SEL",
-            "badgeColor": "#06D6A0",
-            "headline": "Mekanisme Pelindung Molekuler & Stabilitas Sel",
-            "char": "ren",
-            "face": "smile",
-            "fx": "sparkles",
-            "sfx": "chime.mp3",
-            "callouts": [
-                {
-                    "label": "PERISAI MOLEKUL",
-                    "val": "STABILISASI 100%",
-                    "x": 800,
-                    "y": 390,
-                    "tx": 540,
-                    "ty": 550,
-                    "color": "#06D6A0",
-                }
-            ],
-        },
-        {
-            "start": s4,
-            "end": s5,
-            "mode3d": "dna_regeneration",
-            "badge": "🧬 TRANSDIFERENSIASI DNA 3D",
+            "start": times[5],
+            "end": times[6],
+            "mode3d": "dna_telomere",
+            "badge": "🧬 RISET KEDOKTERAN MASA DEPAN",
             "badgeColor": "#72EFDD",
-            "headline": "Reprogramming Sel: Memutar Balik Siklus Usia!",
-            "char": "both",
-            "face": "happy",
-            "faceHina": "love",
-            "fx": "sparkles",
-            "sfx": "sparkle.mp3",
-            "callouts": [
-                {
-                    "label": "HELIKS GANDA",
-                    "val": "REGENERASI SEL",
-                    "x": 250,
-                    "y": 410,
-                    "tx": 520,
-                    "ty": 560,
-                    "color": "#72EFDD",
-                }
-            ],
+            "headline": "Ilmuwan Bedah Telomer & DNA Regenerasi Organ!",
+            "action": "solution_future",
+            "face": "smile",
+            "sfx": "chime.mp3",
+            "kpi": {
+                "label": "KODE GENETIK",
+                "val": "REKAYASA SEL MANUSIA",
+                "x": 540,
+                "y": 420,
+            },
         },
         {
-            "start": s5,
+            "start": times[6],
             "end": round(duration + 0.3, 2),
             "mode3d": "jellyfish_ocean",
-            "badge": "💬 TULIS PENDAPATMU DI KOMENTAR!",
-            "badgeColor": "#FFBE0B",
-            "headline": "Gimana Menurutmu? Tulis di Kolom Komentar ya!",
-            "char": "both",
-            "face": "laugh",
-            "faceHina": "happy",
-            "fx": "sparkles",
+            "badge": "💬 MENURUT KAMU GIMANA?",
+            "badgeColor": "#FFE600",
+            "headline": "Apakah Manusia Bisa Ikut Abadi? Komen di Bawah!",
+            "action": "cta_comment",
+            "face": "happy",
             "sfx": "notification.mp3",
-            "callouts": [],
+            "kpi": {
+                "label": "DISKUSI SAINS",
+                "val": "TULIS DI KOLOM KOMENTAR!",
+                "x": 540,
+                "y": 420,
+            },
         },
     ]
 
