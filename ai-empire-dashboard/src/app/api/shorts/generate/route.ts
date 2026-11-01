@@ -15,10 +15,11 @@ export async function POST(req: NextRequest) {
         ? "local://referensi-islami-400subs-master.mp4"
         : "https://www.youtube.com/shorts/roblox-minecraft-ref");
 
+    const geminiKey = process.env.GEMINI_API_KEY;
     const groqKey = process.env.GROQ_API_KEY;
-    if (!groqKey || groqKey.startsWith("gsk_your_")) {
+    if ((!geminiKey || geminiKey.startsWith("AIzaSy_your_")) && (!groqKey || groqKey.startsWith("gsk_your_"))) {
       return NextResponse.json(
-        { ok: false, error: "GROQ_API_KEY belum dikonfigurasi di Vercel" },
+        { ok: false, error: "GEMINI_API_KEY / GROQ_API_KEY belum dikonfigurasi" },
         { status: 500 }
       );
     }
@@ -79,34 +80,73 @@ Format JSON Output Wajib:
         : `Buat 1 trik/rahasia seru di map Roblox Brookhaven atau Minecraft yang viral hari ini.`;
     }
 
-    const aiRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${groqKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "openai/gpt-oss-120b",
-        messages: [
-          { role: "system", content: promptSystem },
-          { role: "user", content: promptUser },
-        ],
-        temperature: 0.7,
-        response_format: { type: "json_object" },
-      }),
-    });
+    let parsed: Record<string, string> = {};
 
-    if (!aiRes.ok) {
-      const errText = await aiRes.text();
-      return NextResponse.json(
-        { ok: false, error: `Groq API Error: ${errText}` },
-        { status: 500 }
-      );
+    // 1. Gunakan Google Gemini API (Terpisah dari Groq CS agar tidak kena limit!)
+    if (geminiKey && !geminiKey.startsWith("AIzaSy_your_")) {
+      try {
+        const gemRes = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${geminiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [
+                {
+                  role: "user",
+                  parts: [{ text: `${promptSystem}\n\n Tugas: ${promptUser}` }],
+                },
+              ],
+              generationConfig: {
+                temperature: 0.7,
+                responseMimeType: "application/json",
+              },
+            }),
+          }
+        );
+        if (gemRes.ok) {
+          const gemData = await gemRes.json();
+          const gemText = gemData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+          if (gemText) {
+            parsed = JSON.parse(gemText);
+          }
+        }
+      } catch (gemErr) {
+        console.warn("Gemini fallback ke Groq:", gemErr);
+      }
     }
 
-    const aiData = await aiRes.json();
-    const rawContent = aiData?.choices?.[0]?.message?.content?.trim();
-    const parsed = JSON.parse(rawContent || "{}");
+    // 2. Fallback ke Groq (Model openai/gpt-oss-120b memiliki kuota terpisah dari llama-3.3-70b milik CS)
+    if (!parsed.full_script && groqKey) {
+      const aiRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${groqKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "openai/gpt-oss-120b",
+          messages: [
+            { role: "system", content: promptSystem },
+            { role: "user", content: promptUser },
+          ],
+          temperature: 0.7,
+          response_format: { type: "json_object" },
+        }),
+      });
+
+      if (!aiRes.ok) {
+        const errText = await aiRes.text();
+        return NextResponse.json(
+          { ok: false, error: `AI API Error: ${errText}` },
+          { status: 500 }
+        );
+      }
+
+      const aiData = await aiRes.json();
+      const rawContent = aiData?.choices?.[0]?.message?.content?.trim();
+      parsed = JSON.parse(rawContent || "{}");
+    }
 
     const item = {
       niche,
@@ -168,3 +208,4 @@ Format JSON Output Wajib:
     return NextResponse.json({ ok: false, error: msg }, { status: 500 });
   }
 }
+

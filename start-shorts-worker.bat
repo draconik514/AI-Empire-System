@@ -12,3 +12,4 @@ echo.
 cd /d "d:\AI-Empire-System\ai-empire-dashboard\local-agent-bridge"
 python shorts_factory_worker.py --loop
 pause
+
