@@ -43,8 +43,15 @@ export default function CommandCenterDashboard() {
   const [shortsQueue, setShortsQueue] =
     useState<ShortsItem[]>(INITIAL_SHORTS_QUEUE);
   const [agentJobs, setAgentJobs] = useState<AgentJob[]>(INITIAL_AGENT_JOBS);
-  const [selectedNiche, setSelectedNiche] = useState<string>("ALL");
+  const [selectedNiche, setSelectedNiche] = useState<string>("Edukasi_CalonSarjana");
   const [toast, setToast] = useState<string | null>(null);
+
+  // Shorts Auto-Pilot states
+  const [isGeneratingShorts, setIsGeneratingShorts] = useState(false);
+  const [edukasiTopicInput, setEdukasiTopicInput] = useState("");
+  const [edukasiRefUrl, setEdukasiRefUrl] = useState(
+    "https://www.youtube.com/@CalonSarjanaOfficial"
+  );
 
   // Social Auto-Responder states
   const [sopInstruction, setSopInstruction] = useState(
@@ -186,6 +193,42 @@ export default function CommandCenterDashboard() {
       engine: "ReelMimic (video-clone) + OpenMontage + FFmpeg-Skill",
       defaultRef: "https://www.youtube.com/shorts/referensi-roblox-minecraft",
     };
+  };
+
+  const handleAiAutoGenerateShorts = async (
+    niche: ShortsItem["niche"] = "Edukasi_CalonSarjana"
+  ) => {
+    setIsGeneratingShorts(true);
+    notify(
+      `🤖 AI sedang meriset topik viral & menyusun naskah gaya ${
+        niche === "Edukasi_CalonSarjana" ? "Calon Sarjana" : niche
+      }...`
+    );
+    try {
+      const res = await fetch("/api/shorts/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          niche,
+          custom_topic: edukasiTopicInput.trim() || undefined,
+          reference_url: edukasiRefUrl.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (data.ok && data.item) {
+        setShortsQueue((prev) => [data.item, ...prev]);
+        notify(
+          `⚡ Naskah Selesai: "${data.item.title}"! Masuk antrean render laptop.`
+        );
+        setEdukasiTopicInput("");
+      } else {
+        notify(`Gagal generate naskah: ${data.error || "Unknown error"}`);
+      }
+    } catch {
+      notify("Koneksi gagal saat menghubungi AI Groq.");
+    } finally {
+      setIsGeneratingShorts(false);
+    }
   };
 
   const handleAddClonedShort = async (e: React.FormEvent) => {
@@ -711,143 +754,216 @@ export default function CommandCenterDashboard() {
         )}
 
         {/* ===================================================================
-            TAB 2: YOUTUBE SHORTS FACTORY (REELMIMIC CLONING + REVISION LOOP)
+            TAB 2: YOUTUBE SHORTS FACTORY (SEPARATED NICHE WORKSPACES)
         =================================================================== */}
         {activeTab === "shorts" && (
           <div className="space-y-6">
-            {/* Top Niche Filter & Create New Cloned Video Form */}
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-              {/* Left Form: Add Reference-Cloned Video */}
-              <div className="lg:col-span-5">
-                <div className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-6 backdrop-blur-2xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]">
-                  <h2 className="text-sm font-semibold text-white">
-                    Buat Video Baru dari Referensi (ReelMimic Cloner)
-                  </h2>
-                  <p className="mt-1 text-xs text-zinc-400">
-                    Masukkan link/file video referensi. AI akan meniru gaya
-                    editan, subtitle, motion graphics, dan SFX-nya dengan isi
-                    konten baru.
-                  </p>
+            {/* Top Niche Sub-Navigation Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-5 backdrop-blur-2xl">
+              <div>
+                <h2 className="text-sm font-semibold text-white">
+                  Pusat Produksi YouTube Shorts Multi-Niche
+                </h2>
+                <p className="mt-0.5 text-xs text-zinc-400">
+                  Pilih niche di samping untuk fokus memantau referensi dan progres video masing-masing channel.
+                </p>
+              </div>
 
-                  <form
-                    onSubmit={handleAddClonedShort}
-                    className="mt-4 space-y-3.5"
+              <div className="flex flex-wrap gap-2">
+                {[
+                  {
+                    id: "Edukasi_CalonSarjana",
+                    label: "🎓 Edukasi (Calon Sarjana)",
+                    badge: "Auto-Pilot AI",
+                  },
+                  {
+                    id: "Islamic",
+                    label: "🕌 Islami (Target 1K Subs)",
+                    badge: "Channel Pribadi",
+                  },
+                  {
+                    id: "Gaming_Roblox_Minecraft",
+                    label: "🎮 Kids (Roblox/Minecraft)",
+                    badge: "Auto-Pilot AI",
+                  },
+                  {
+                    id: "ALL",
+                    label: "📂 Semua Niche",
+                    badge: `${shortsQueue.length}`,
+                  },
+                ].map((n) => (
+                  <button
+                    key={n.id}
+                    onClick={() => setSelectedNiche(n.id)}
+                    className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-medium transition ${
+                      selectedNiche === n.id
+                        ? "border border-emerald-500/40 bg-emerald-500/20 text-emerald-200 shadow-md"
+                        : "border border-white/10 bg-white/[0.03] text-zinc-400 hover:bg-white/[0.08] hover:text-white"
+                    }`}
                   >
-                    <div>
-                      <label className="mb-1.5 block text-[11px] text-zinc-400">
-                        Pilih Niche Spesifik
-                      </label>
-                      <select
-                        value={newShortsNiche}
-                        onChange={(e) =>
-                          setNewShortsNiche(
-                            e.target.value as ShortsItem["niche"]
-                          )
-                        }
-                        className="w-full rounded-xl border border-white/[0.08] bg-black/50 px-3 py-2.5 text-xs text-white focus:border-white/25 focus:outline-none"
-                      >
-                        <option value="Islamic">
-                          1. Islami — Ikuti Referensi Editan 400 Subs + Upgrade
-                          Pro
-                        </option>
-                        <option value="Edukasi_CalonSarjana">
-                          2. Edukasi & Fakta Unik — Gaya Calon Sarjana (Motion +
-                          SFX)
-                        </option>
-                        <option value="Gaming_Roblox_Minecraft">
-                          3. Anak Gaming — Spesifik Roblox & Minecraft
-                          (ReelMimic)
-                        </option>
-                      </select>
-                    </div>
+                    <span>{n.label}</span>
+                    <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-zinc-300">
+                      {n.badge}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
 
+            {/* NICHE 1: EDUKASI CALON SARJANA SPECIALIZED WORKSPACE */}
+            {selectedNiche === "Edukasi_CalonSarjana" && (
+              <div className="space-y-6">
+                {/* Hero Auto-Pilot Card for Edukasi */}
+                <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.04] p-6 backdrop-blur-2xl shadow-[inset_0_1px_0_0_rgba(16,185,129,0.15)]">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
-                      <label className="mb-1.5 block text-[11px] text-zinc-400">
-                        Judul / Topik Konten Baru
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Contoh: 3 Rahasia Map Baru di Brookhaven Roblox / Fakta Unik..."
-                        value={newShortsTitle}
-                        onChange={(e) => setNewShortsTitle(e.target.value)}
-                        className="w-full rounded-xl border border-white/[0.08] bg-black/50 px-3 py-2.5 text-xs text-white placeholder-zinc-600 focus:border-white/25 focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1.5 block text-[11px] text-zinc-400">
-                        Link / File Video Referensi yang Ingin Ditiru Gaya
-                        Editannya
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="https://youtube.com/shorts/... atau path file referensi lokal"
-                        value={newShortsRefUrl}
-                        onChange={(e) => setNewShortsRefUrl(e.target.value)}
-                        className="w-full rounded-xl border border-white/[0.08] bg-black/50 px-3 py-2.5 text-xs text-white placeholder-zinc-600 focus:border-white/25 focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="mb-1.5 block text-[11px] text-zinc-400">
-                        Instruksi Editan / Motion / SFX Tambahan (Opsional)
-                      </label>
-                      <textarea
-                        rows={3}
-                        placeholder="Contoh: Tiru gaya subtitle & transisi dari referensi, tambahkan SFX whoosh + overlay fakta ala Calon Sarjana..."
-                        value={newShortsStyleNotes}
-                        onChange={(e) => setNewShortsStyleNotes(e.target.value)}
-                        className="w-full rounded-xl border border-white/[0.08] bg-black/50 p-3 text-xs text-white placeholder-zinc-600 focus:border-white/25 focus:outline-none"
-                      />
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-full border border-emerald-500/30 bg-emerald-500/15 px-3 py-0.5 text-xs font-semibold text-emerald-300">
+                          Auto-Pilot Aktif 100%
+                        </span>
+                        <span className="text-xs text-zinc-400">
+                          Durasi 1–2 Menit · Format 9:16 Shorts
+                        </span>
+                      </div>
+                      <h3 className="mt-2 text-lg font-bold text-white">
+                        Pabrik Video Edukasi & Fakta Unik (Gaya Calon Sarjana)
+                      </h3>
+                      <p className="mt-1 max-w-2xl text-xs text-zinc-300 leading-relaxed">
+                        Kamu tidak perlu memikirkan judul atau mencari video. Cukup klik tombol di samping: AI otomatis mencari fakta viral, menyusun hook memikat, merekam suara narator enerjik (Edge-TTS Ardi), dan merakit klip cepat 2.5s + SFX whoosh via laptopmu!
+                      </p>
                     </div>
 
                     <button
-                      type="submit"
-                      className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/15 py-2.5 text-xs font-medium text-emerald-200 hover:bg-emerald-500/25 transition"
+                      onClick={() => handleAiAutoGenerateShorts("Edukasi_CalonSarjana")}
+                      disabled={isGeneratingShorts}
+                      className="flex items-center gap-2.5 rounded-xl border border-emerald-400 bg-emerald-500 px-6 py-3.5 text-sm font-semibold text-black shadow-xl shadow-emerald-500/20 hover:bg-emerald-400 active:scale-95 transition disabled:opacity-50"
                     >
-                      <Plus className="h-3.5 w-3.5" />
+                      <Sparkles className={`h-4 w-4 ${isGeneratingShorts ? "animate-spin" : ""}`} />
                       <span>
-                        Clone Gaya Referensi & Masukkan Antrean Render
+                        {isGeneratingShorts
+                          ? "AI Sedang Riset & Tulis Naskah..."
+                          : "⚡ AI Otomatis: Buat 1 Video Edukasi Hari Ini"}
                       </span>
                     </button>
-                  </form>
-                </div>
-              </div>
+                  </div>
 
-              {/* Right List: Active Shorts Projects + Targeted Revision Engine */}
-              <div className="lg:col-span-7 space-y-4">
-                {/* Filter Bar */}
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-4 backdrop-blur-2xl">
-                  <span className="text-xs font-medium text-zinc-300">
-                    Filter Niche Produksi:
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {[
-                      { id: "ALL", label: "Semua Niche" },
-                      { id: "Islamic", label: "Islami (400→1K Subs)" },
-                      {
-                        id: "Edukasi_CalonSarjana",
-                        label: "Edukasi (Calon Sarjana)",
-                      },
-                      {
-                        id: "Gaming_Roblox_Minecraft",
-                        label: "Anak (Roblox & Minecraft)",
-                      },
-                    ].map((f) => (
-                      <button
-                        key={f.id}
-                        onClick={() => setSelectedNiche(f.id)}
-                        className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
-                          selectedNiche === f.id
-                            ? "border border-white/20 bg-white/[0.1] text-white"
-                            : "text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200"
-                        }`}
-                      >
-                        {f.label}
-                      </button>
-                    ))}
+                  {/* Reference & Customization Controls */}
+                  <div className="mt-6 grid grid-cols-1 gap-4 border-t border-emerald-500/15 pt-5 sm:grid-cols-2">
+                    <div>
+                      <label className="block text-[11px] font-medium text-zinc-400">
+                        Link Channel / Video Referensi Gaya Calon Sarjana:
+                      </label>
+                      <input
+                        type="text"
+                        value={edukasiRefUrl}
+                        onChange={(e) => setEdukasiRefUrl(e.target.value)}
+                        placeholder="https://www.youtube.com/@CalonSarjanaOfficial"
+                        className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/60 px-3.5 py-2.5 text-xs text-zinc-200 placeholder-zinc-600 focus:border-emerald-500/50 focus:outline-none"
+                      />
+                      <p className="mt-1 text-[10px] text-zinc-500">
+                        Gaya yang ditiru: Fast cut tiap 2.5 detik, Motion data/angka (Hyperframes), SFX Whoosh/Suspense.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-medium text-zinc-400">
+                        Punya Topik Khusus? (Opsional, kosongkan jika mau AI yang menentukan):
+                      </label>
+                      <input
+                        type="text"
+                        value={edukasiTopicInput}
+                        onChange={(e) => setEdukasiTopicInput(e.target.value)}
+                        placeholder="Misal: 3 Fakta Gila Segitiga Bermuda (Boleh dikosongkan)"
+                        className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/60 px-3.5 py-2.5 text-xs text-zinc-200 placeholder-zinc-600 focus:border-emerald-500/50 focus:outline-none"
+                      />
+                      <p className="mt-1 text-[10px] text-zinc-500">
+                        Jika dikosongkan, AI Groq akan memilih topik sains/fakta misteri terpopuler secara acak.
+                      </p>
+                    </div>
                   </div>
                 </div>
+
+                {/* Info Box: Mekanisme Render Laptop */}
+                <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 text-xs text-zinc-300">
+                  <div className="flex items-center gap-2 font-semibold text-white">
+                    <Terminal className="h-4 w-4 text-emerald-400" />
+                    <span>Mekanisme Render di Laptop Kamu:</span>
+                  </div>
+                  <p className="mt-1 text-zinc-400">
+                    Setelah tombol diklik, naskah akan masuk ke status <code className="text-emerald-300">Queued_For_Laptop</code>. Begitu kamu menjalankan skrip <code className="text-zinc-200">shorts_factory_worker.py</code> di laptop, video otomatis dirender menggunakan chip <strong>Intel Iris Xe</strong> dan langsung dikirimkan ke <strong>Bot Telegram kamu</strong> untuk ditonton!
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* NICHE 2: ISLAMIC WORKSPACE */}
+            {selectedNiche === "Islamic" && (
+              <div className="rounded-2xl border border-amber-500/25 bg-amber-500/[0.04] p-6 backdrop-blur-2xl">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <span className="rounded-full border border-amber-500/30 bg-amber-500/15 px-3 py-0.5 text-xs font-semibold text-amber-300">
+                      Channel Pribadi Kamu (400 ➔ 1.000 Subs)
+                    </span>
+                    <h3 className="mt-2 text-lg font-bold text-white">
+                      Pabrik Video Islami & Doa Mustajab
+                    </h3>
+                    <p className="mt-1 max-w-2xl text-xs text-zinc-300 leading-relaxed">
+                      Meniru gaya editan asli channel kamu: Subtitle Karaoke Emas, transisi halus, warm color grading, dan audio latar yang mengecil otomatis (*auto-ducking*). Kamu yang menentukan judul/tema sesuai syariat.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleAiAutoGenerateShorts("Islamic")}
+                    disabled={isGeneratingShorts}
+                    className="flex items-center gap-2.5 rounded-xl border border-amber-400 bg-amber-500 px-6 py-3.5 text-sm font-semibold text-black shadow-xl hover:bg-amber-400 transition disabled:opacity-50"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    <span>Generate Naskah Islami Hari Ini</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* NICHE 3: KIDS GAMING WORKSPACE */}
+            {selectedNiche === "Gaming_Roblox_Minecraft" && (
+              <div className="rounded-2xl border border-cyan-500/25 bg-cyan-500/[0.04] p-6 backdrop-blur-2xl">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <span className="rounded-full border border-cyan-500/30 bg-cyan-500/15 px-3 py-0.5 text-xs font-semibold text-cyan-300">
+                      Auto-Pilot Gaming Anak
+                    </span>
+                    <h3 className="mt-2 text-lg font-bold text-white">
+                      Pabrik Konten Roblox & Minecraft
+                    </h3>
+                    <p className="mt-1 max-w-2xl text-xs text-zinc-300 leading-relaxed">
+                      AI otomatis meriset rahasia map Brookhaven / Minecraft, membuat subtitle membal-membal (*bouncy pop-up*), efek zoom shake, dan SFX meme ramah anak.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleAiAutoGenerateShorts("Gaming_Roblox_Minecraft")}
+                    disabled={isGeneratingShorts}
+                    className="flex items-center gap-2.5 rounded-xl border border-cyan-400 bg-cyan-500 px-6 py-3.5 text-sm font-semibold text-black shadow-xl hover:bg-cyan-400 transition disabled:opacity-50"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    <span>⚡ AI Otomatis: Buat 1 Video Gaming Hari Ini</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* List of Shorts Projects in Selected Niche */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-semibold text-white">
+                  Daftar Antrean & Riwayat Render (
+                  {selectedNiche === "ALL"
+                    ? "Semua Niche"
+                    : getNicheLabel(selectedNiche as ShortsItem["niche"])}
+                  ):
+                </h4>
+                <span className="text-xs text-zinc-500">
+                  {filteredShorts.length} Video Terdaftar
+                </span>
+              </div>
 
                 {/* Project Cards */}
                 {filteredShorts.map((item) => (
