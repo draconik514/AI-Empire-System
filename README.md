@@ -35,4 +35,6 @@ Sistem Otomasi Bisnis Multi-Income Mandiri (Rp 0 Cloud & Hardware Optimized untu
 
 ---
 
-*Dikembangkan oleh @draconik514.*
+*Dikembangkan oleh @draconik514 (CI/CD Auto-Deploy Vercel Active).*
+
+
