@@ -1073,7 +1073,6 @@ export default function CommandCenterDashboard() {
                 ))}
               </div>
             </div>
-          </div>
         )}
 
         {/* ===================================================================
