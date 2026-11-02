@@ -1,4 +1,4 @@
-1dddddddddddddddddddddddddddddddddddddddddddddimport os
+import os
 import sys
 import json
 import time
@@ -390,7 +390,7 @@ def render_and_upload(raw_video: str, title: str, source_channel: str):
     print(f"🎉 RENDER SUKSES! File: {output_mp4} ({size_mb:.2f} MB)")
 
     # 6. Kirim ke Telegram
-    print("📤 Mengirim ke Telegram Bot...")
+    print("📤 Mengirim ke Telegram Bot via Python requests...")
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendVideo"
     caption = (
         f"🎬 HASIL VIDEO YOUTUBE SHORTS (Z-CODE)\n\n"
@@ -405,15 +405,14 @@ def render_and_upload(raw_video: str, title: str, source_channel: str):
         f"Video siap upload ke YouTube Shorts channel Anda! 🚀"
     )
 
-    cmd_curl = [
-        "curl.exe", "--http1.1",
-        "-F", f"chat_id={TELEGRAM_CHAT_ID}",
-        "-F", f"caption={caption}",
-        "-F", f"video=@{output_mp4}",
-        url
-    ]
-    res = subprocess.run(cmd_curl, capture_output=True, text=True, encoding="utf-8", errors="replace")
-    print("Telegram response:", res.stdout[:200])
+    try:
+        with open(output_mp4, "rb") as vf:
+            data = {"chat_id": TELEGRAM_CHAT_ID, "caption": caption}
+            files = {"video": (os.path.basename(output_mp4), vf, "video/mp4")}
+            resp = requests.post(url, data=data, files=files, timeout=120)
+            print("Telegram response:", resp.status_code, resp.text[:200])
+    except Exception as e:
+        print("Gagal upload Telegram:", e)
 
 def main():
     parser = argparse.ArgumentParser()
