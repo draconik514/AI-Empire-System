@@ -7,3 +7,4 @@ echo   Status: Standby memantau antrean Web Dashboard / Supabase setiap 10 detik
 echo ===========================================================================
 python "%~dp0shorts_factory_worker.py" --loop
 pause
+

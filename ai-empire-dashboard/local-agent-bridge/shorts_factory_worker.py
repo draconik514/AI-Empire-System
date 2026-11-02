@@ -657,26 +657,20 @@ def process_one_job(force_latest: bool = False):
     log(f"🚀 Memproses Video: [{niche}] '{item.get('title')}'")
 
     if niche == "Islamic":
-        import render_islamic_zcode as isl
-        short_id = item.get("id", f"local_{int(time.time())}")
-        title = item.get("title", "2 Cara Atasi Masalah Hidup! - Solusi Islami")
-        script = item.get("full_script") or item.get("hook_text") or "Solusi Islami hari ini."
-        source = item.get("source_channel") or "RaymondChin"
-        
-        tag = f"islamic_{short_id}"
-        audio_path = os.path.join(WORK_DIR, f"{tag}.mp3")
-        ass_path = os.path.join(WORK_DIR, f"{tag}.ass")
-        output_mp4 = os.path.join(WORK_DIR, f"{tag}.mp4")
-        
-        dur = asyncio.run(isl.generate_voice_and_subtitles(script, audio_path, ass_path, source, title))
-        isl.render_islamic_video(audio_path, ass_path, output_mp4, dur, title)
-        tg_url = isl.send_to_telegram(output_mp4, title, source)
-        
+        import build_zcode_perfect_pipeline as zcode
+        title = item.get("title", "TIDAK ADA TAKDIR YANG SALAH\nEKSPEKTASI KITA YANG SALAH")
+        source = item.get("source_channel") or "YNTV"
+        input_vid = os.path.join(WORK_DIR, "input_video.mp4")
+        if not os.path.exists(input_vid):
+            input_vid = zcode.DEFAULT_RAW_VIDEO
+
+        log(f"🎬 Menjalankan Master Islamic Z-Code Pipeline dengan video: {input_vid}...")
+        zcode.render_and_upload(input_vid, title, source)
+
         supabase_update_status(
             item["id"],
             "Review_in_Telegram",
-            tg_msg_url=tg_url,
-            extra={"engine_used": "Islamic Z-Code Pipeline (Crop 9:16 + Subtitle Kuning/Merah + Watermark + Filter 4K)"}
+            extra={"engine_used": "Islamic Z-Code V3 (Split Cover 2 Speakers + Glass Watermark + Word-Level ASS + CapCut HD)"}
         )
         log("🎉 Alur produksi video Islamic Z-Code selesai! Silakan cek Telegram Anda.")
         return True

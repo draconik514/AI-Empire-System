@@ -111,29 +111,34 @@ export default function AIEmpireDashboard() {
   // Handler: Process Islamic Short ala Z-Code
   const handleProcessIslamicShort = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!islamicVideoFile) {
+      notify("⚠️ Mohon Drag & Drop atau Pilih file video mentah terlebih dahulu!");
+      return;
+    }
     if (!islamicTitle.trim()) {
-      notify("Mohon isi Title Cover terlebih dahulu!");
+      notify("⚠️ Mohon isi Title Box Kuning untuk Cover terlebih dahulu!");
       return;
     }
     setIsProcessingIslamic(true);
 
     try {
-      const res = await fetch("/api/shorts/generate", {
+      const formData = new FormData();
+      formData.append("file", islamicVideoFile);
+      formData.append("title", islamicTitle);
+      formData.append("source", islamicSourceYt || "YNTV");
+
+      const res = await fetch("/api/shorts/upload", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          niche: "Islamic",
-          custom_topic: islamicTitle,
-          source_channel: islamicSourceYt || "YNTV",
-          duration_target: "1.5m",
-        }),
+        body: formData,
       });
       const data = await res.json();
-      if (data.ok && data.item) {
-        setShortsQueue((prev) => [data.item, ...prev]);
-        notify("🚀 Video Islamic dijadwalkan untuk auto-edit Z-Code di laptop lokal!");
+      if (data.ok) {
+        if (data.item) {
+          setShortsQueue((prev) => [data.item, ...prev]);
+        }
+        notify("🎉 Video mentah diterima! Sedang diedit otomatis ala Z-Code di laptop lokal & langsung dikirim ke Telegram!");
       } else {
-        notify("Gagal menjadwalkan: " + (data.error || "Unknown error"));
+        notify("Gagal memproses: " + (data.error || "Unknown error"));
       }
     } catch (err: unknown) {
       notify("Error: " + (err instanceof Error ? err.message : "Network error"));
@@ -385,17 +390,40 @@ export default function AIEmpireDashboard() {
                   {/* Drag and Drop Zone */}
                   <label
                     htmlFor="islamicFile"
-                    className="border-2 border-dashed border-amber-500/30 hover:border-amber-400 bg-amber-500/5 hover:bg-amber-500/10 rounded-2xl p-6 flex flex-col items-center justify-center cursor-pointer transition-all group"
+                    className={`border-2 border-dashed rounded-2xl p-6 flex flex-col items-center justify-center cursor-pointer transition-all group ${
+                      islamicVideoFile
+                        ? "border-emerald-500/60 bg-emerald-500/10 hover:bg-emerald-500/15"
+                        : "border-amber-500/30 hover:border-amber-400 bg-amber-500/5 hover:bg-amber-500/10"
+                    }`}
                   >
-                    <FileVideo className="w-12 h-12 text-amber-400 group-hover:scale-110 transition-transform mb-3" />
-                    <div className="text-sm font-bold text-white">
-                      {islamicVideoFile
-                        ? islamicVideoFile.name
-                        : "Klik atau Drag & Drop Video Mentah ke Sini"}
-                    </div>
-                    <div className="text-xs text-slate-400 mt-1">
-                      Format: MP4, MOV, atau MKV (Maks 250 MB)
-                    </div>
+                    <FileVideo
+                      className={`w-12 h-12 mb-3 transition-transform group-hover:scale-110 ${
+                        islamicVideoFile ? "text-emerald-400" : "text-amber-400"
+                      }`}
+                    />
+                    {islamicVideoFile ? (
+                      <div className="text-center">
+                        <div className="inline-flex items-center gap-2 bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 px-3 py-1 rounded-full text-xs font-bold mb-2">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Video Siap Diproses</span>
+                        </div>
+                        <div className="text-sm font-bold text-white break-all max-w-md">
+                          {islamicVideoFile.name}
+                        </div>
+                        <div className="text-xs text-emerald-300/80 mt-1">
+                          Ukuran: {(islamicVideoFile.size / (1024 * 1024)).toFixed(2)} MB · Klik untuk ganti video
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center">
+                        <div className="text-sm font-bold text-white">
+                          Klik atau Drag & Drop Video Mentah ke Sini
+                        </div>
+                        <div className="text-xs text-slate-400 mt-1">
+                          Format: MP4, MOV, atau MKV (Maks 250 MB)
+                        </div>
+                      </div>
+                    )}
                     <input
                       id="islamicFile"
                       type="file"
