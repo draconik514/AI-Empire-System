@@ -31,28 +31,39 @@ export async function POST(req: NextRequest) {
 
     console.log(`[Upload] File video tersimpan di ${inputVideoPath} (${(buffer.length / (1024 * 1024)).toFixed(2)} MB)`);
 
-    // Catat ke Supabase jika terkonfigurasi
+    // Catat ke Supabase tabel youtube_shorts_queue agar tampil live di Riwayat & Antrean
     let queueItem = null;
     if (isSupabaseConfigured && supabase) {
+      const insertPayload = {
+        niche: "Islamic",
+        title: title,
+        hook_text: "⏳ [10%] Video diterima di Localhost, menyiapkan pipeline Z-Code...",
+        full_script: "",
+        reference_video_url: "https://www.youtube.com/@islamic-short-513",
+        style_preset: `Islamic Z-Code Style (Portrait 9:16 Crop, Subtitle Kuning/Merah, Watermark [YT] ${sourceChannel}, Filter HD 4K)`,
+        sfx_and_motion_notes: "Cover Split-Screen 2 Pembicara, Auto Deskripsi + Hashtag AI",
+        engine_used: "Z-Code Local Pipeline + Groq Whisper + FFmpeg",
+        status: "Rendering (10%)",
+        revision_version: 1,
+        revision_notes: null,
+        telegram_message_url: null,
+      };
       const { data, error } = await supabase
-        .from("shorts_queue")
-        .insert({
-          niche: "Islamic",
-          title: title,
-          hook_text: title,
-          source_channel: sourceChannel,
-          status: "Processing_Local",
-          reference_url: "https://www.youtube.com/@islamic-short-513",
-          revision_version: 1,
-        })
+        .from("youtube_shorts_queue")
+        .insert([insertPayload])
         .select()
         .single();
-      if (!error && data) queueItem = data;
+      if (!error && data) {
+        queueItem = data;
+      } else if (error) {
+        console.error("[Supabase Insert Error]:", error.message);
+      }
     }
 
     // Jalankan pipeline editing Z-Code secara asynchronous di laptop
     const pythonScript = path.join(bridgeDir, "build_zcode_perfect_pipeline.py");
-    const cmd = `python "${pythonScript}" --input "${inputVideoPath}" --title "${title.replace(/"/g, '\\"')}" --source "${sourceChannel}"`;
+    const queueIdArg = queueItem?.id ? ` --queue-id "${queueItem.id}"` : "";
+    const cmd = `python "${pythonScript}" --input "${inputVideoPath}" --title "${title.replace(/"/g, '\\"')}" --source "${sourceChannel}"${queueIdArg}`;
 
     console.log(`[Z-Code Trigger] Menjalankan: ${cmd}`);
     exec(cmd, { cwd: bridgeDir }, (err, stdout, stderr) => {

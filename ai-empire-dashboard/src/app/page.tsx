@@ -93,7 +93,7 @@ export default function AIEmpireDashboard() {
     setTimeout(() => setToast(null), 4000);
   };
 
-  // Sync data with Supabase on mount
+  // Sync data with Supabase on mount & poll live progress every 3 seconds
   useEffect(() => {
     const sb = supabase;
     if (!isSupabaseConfigured || !sb) return;
@@ -106,6 +106,8 @@ export default function AIEmpireDashboard() {
       if (shRes.data?.length) setShortsQueue(shRes.data);
     };
     fetchAll();
+    const interval = setInterval(fetchAll, 3000);
+    return () => clearInterval(interval);
   }, []);
 
   // Handler: Process Islamic Short ala Z-Code
@@ -616,47 +618,95 @@ export default function AIEmpireDashboard() {
                   <tbody className="divide-y divide-slate-800/60 font-medium">
                     {shortsQueue
                       .filter((s) => s.niche === "Islamic")
-                      .map((item) => (
-                        <tr key={item.id} className="hover:bg-slate-800/30">
-                          <td className="py-3 px-4">
-                            <div className="font-bold text-white">{item.title}</div>
-                            <div className="text-[10px] text-slate-400 mt-0.5">
-                              {item.hook_text}
-                            </div>
-                          </td>
-                          <td className="py-3 px-4">
-                            <span className="bg-amber-500/10 text-amber-400 font-semibold px-2 py-0.5 rounded border border-amber-500/20">
-                              {item.style_preset || "Z-Code Style"}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4">
-                            <span
-                              className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                                item.status === "Review_in_Telegram"
-                                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                                  : "bg-blue-500/20 text-blue-400 border border-blue-500/30"
-                              }`}
-                            >
-                              {item.status}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4">
-                            {item.telegram_message_url ? (
-                              <a
-                                href={item.telegram_message_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-amber-400 hover:underline flex items-center gap-1 font-bold"
+                      .map((item) => {
+                        const pctMatch = (item.status || "").match(/(\d+)%/);
+                        const progressPct = pctMatch
+                          ? parseInt(pctMatch[1], 10)
+                          : item.status === "Review_in_Telegram"
+                          ? 100
+                          : 0;
+                        const isLiveRunning =
+                          item.status?.includes("Rendering") ||
+                          item.status?.includes("Sending") ||
+                          item.status?.includes("Processing");
+
+                        return (
+                          <tr key={item.id} className="hover:bg-slate-800/30">
+                            <td className="py-3.5 px-4 max-w-md">
+                              <div className="font-bold text-white">{item.title}</div>
+                              <div className="text-[11px] text-slate-300 mt-1 flex items-center gap-1.5">
+                                {isLiveRunning && (
+                                  <RefreshCw className="w-3 h-3 text-amber-400 animate-spin shrink-0" />
+                                )}
+                                <span>{item.hook_text}</span>
+                              </div>
+                              {isLiveRunning && progressPct > 0 && (
+                                <div className="w-full bg-slate-800 rounded-full h-1.5 mt-2 overflow-hidden">
+                                  <div
+                                    className="bg-gradient-to-r from-amber-400 to-emerald-400 h-1.5 rounded-full transition-all duration-500"
+                                    style={{ width: `${progressPct}%` }}
+                                  ></div>
+                                </div>
+                              )}
+                              {item.full_script && item.status === "Review_in_Telegram" && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(item.full_script);
+                                    notify("📋 Deskripsi & Hashtag YouTube berhasil disalin!");
+                                  }}
+                                  className="mt-2 inline-flex items-center gap-1.5 text-[10px] font-bold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-lg transition-all"
+                                >
+                                  <Sparkles className="w-3 h-3" />
+                                  <span>Copy Deskripsi & Hashtag AI</span>
+                                </button>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <span className="bg-amber-500/10 text-amber-400 font-semibold px-2 py-0.5 rounded border border-amber-500/20">
+                                {item.style_preset || "Z-Code Style"}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <span
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                                  item.status === "Review_in_Telegram"
+                                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                                    : isLiveRunning
+                                    ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse"
+                                    : "bg-blue-500/20 text-blue-400 border border-blue-500/30"
+                                }`}
                               >
-                                <span>Buka Video</span>
-                                <ExternalLink className="w-3.5 h-3.5" />
-                              </a>
-                            ) : (
-                              <span className="text-slate-500">Terkirim ke Bot</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
+                                {isLiveRunning && (
+                                  <RefreshCw className="w-3 h-3 animate-spin" />
+                                )}
+                                {item.status === "Review_in_Telegram"
+                                  ? "✅ Selesai (Terkirim)"
+                                  : item.status}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4">
+                              {item.telegram_message_url ? (
+                                <a
+                                  href={item.telegram_message_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-amber-400 hover:underline flex items-center gap-1 font-bold"
+                                >
+                                  <span>Buka Video</span>
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                </a>
+                              ) : isLiveRunning ? (
+                                <span className="text-amber-400/80 text-[11px] font-semibold">
+                                  Sedang Diproses...
+                                </span>
+                              ) : (
+                                <span className="text-slate-400">Terkirim ke Bot</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     {shortsQueue.filter((s) => s.niche === "Islamic").length === 0 && (
                       <tr>
                         <td colSpan={4} className="py-8 text-center text-slate-500">
