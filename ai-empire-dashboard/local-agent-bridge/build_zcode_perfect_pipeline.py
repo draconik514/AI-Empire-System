@@ -197,10 +197,12 @@ def generate_split_cover(raw_video: str, title: str, out_cover: str):
         dark_r = 255.0 - float(np.percentile(right_half, 5))
         return both_detected * 800.0 + (c_l + c_r) * 3.0 + (dark_l + dark_r) * 2.0
 
-    # Sampling setiap 2 detik untuk mendapatkan frame wajah dengan mata terbuka lebar
+    # Sampling menyeluruh mulai dari detik ke-0 (agar hook pembicara pertama di awal video tidak terlewat)
+    # Langkah per 1 detik di 15 detik awal, dan per 2 detik setelahnya
     samples = []
     max_scan_sec = min(int(duration) - 1, 135)
-    for sec in range(2, max(3, max_scan_sec), 2):
+    scan_points = list(range(0, min(15, int(duration)))) + list(range(16, max(17, max_scan_sec), 2))
+    for sec in scan_points:
         cap.set(cv2.CAP_PROP_POS_MSEC, float(sec) * 1000)
         ret, frame = cap.read()
         if not ret:
@@ -216,8 +218,12 @@ def generate_split_cover(raw_video: str, title: str, out_cover: str):
     if not samples:
         raise RuntimeError("Gagal membaca frame dari video input.")
 
-    # Kelompokkan frame yang memiliki wajah terdeteksi berdasarkan kemiripan scene (< 35.0)
-    face_samples = [s for s in samples if s["face"] is not None] or samples
+    # Prioritaskan frame closeup pembicara (face is not None)
+    face_samples = [s for s in samples if s["face"] is not None]
+    if len(face_samples) < 2:
+        face_samples = samples
+
+    # Kelompokkan frame berdasarkan kemiripan visual signature (< 35.0)
     clusters = []
     for s in face_samples:
         placed = False
@@ -229,17 +235,32 @@ def generate_split_cover(raw_video: str, title: str, out_cover: str):
         if not placed:
             clusters.append([s])
 
-    # Urutkan berdasarkan 2 pembicara yang paling sering muncul di video
+    # Urutkan cluster berdasarkan jumlah kemunculan
     clusters.sort(key=lambda c: len(c), reverse=True)
 
-    if len(clusters) >= 2:
-        speaker1 = max(clusters[0], key=lambda s: s["score"])
-        speaker2 = max(clusters[1], key=lambda s: s["score"])
-    else:
-        speaker1 = max(clusters[0], key=lambda s: s["score"])
-        # Cari frame dari seluruh sampel yang paling berbeda secara visual
-        diff_samples = sorted(samples, key=lambda s: np.abs(speaker1["sig"] - s["sig"]).mean(), reverse=True)[:5]
-        speaker2 = max(diff_samples, key=lambda s: s["score"])
+    # Pembicara 1: Ambil frame dengan skor mata terbaik dari cluster pembicara paling dominan
+    speaker1 = max(clusters[0], key=lambda s: s["score"])
+
+    # Pembicara 2: WAJIB orang yang BERBEDA secara visual (diff >= 38.0) dari Pembicara 1
+    # Ini menjamin tidak akan pernah mengambil orang yang sama dari sudut/baju yang identik
+    speaker2 = None
+    for c in clusters[1:]:
+        cand = max(c, key=lambda s: s["score"])
+        diff = float(np.abs(speaker1["sig"] - cand["sig"]).mean())
+        if diff >= 38.0:
+            speaker2 = cand
+            break
+
+    # Fallback jika hanya ada 1 cluster: cari frame dari seluruh face_samples yang paling beda visualnya
+    if speaker2 is None:
+        diff_samples = [s for s in face_samples if float(np.abs(speaker1["sig"] - s["sig"]).mean()) >= 35.0]
+        if diff_samples:
+            speaker2 = max(diff_samples, key=lambda s: s["score"])
+        elif len(clusters) >= 2:
+            speaker2 = max(clusters[1], key=lambda s: s["score"])
+        else:
+            diff_samples = sorted(samples, key=lambda s: np.abs(speaker1["sig"] - s["sig"]).mean(), reverse=True)[:5]
+            speaker2 = max(diff_samples, key=lambda s: s["score"])
 
     print(f"✅ Pembicara 1 dipilih pada detik ke-{speaker1['sec']}s (Eye Score: {speaker1['score']:.1f})")
     print(f"✅ Pembicara 2 dipilih pada detik ke-{speaker2['sec']}s (Eye Score: {speaker2['score']:.1f})")
