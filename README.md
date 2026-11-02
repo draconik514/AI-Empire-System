@@ -6,12 +6,19 @@
 
 ## 📑 DAFTAR ISI
 1. [Arsitektur & Spesifikasi Sistem](#1-arsitektur--spesifikasi-sistem)
-2. [Ekosistem Kunci & Konfigurasi Lingkungan (.env.local)](#2-ekosistem-kunci--konfigurasi-lingkungan-envlocal)
-3. [Divisi CS Client Auto-Responder (Instagram DM & Telegram)](#3-divisi-cs-client-auto-responder-instagram-dm--telegram)
-4. [Divisi Pabrik YouTube Shorts Islamic (Z-Code Auto-Editor)](#4-divisi-pabrik-youtube-shorts-islamic-z-code-auto-editor)
-5. [Infrastruktur Dashboard & Localhost Bridge](#5-infrastruktur-dashboard--localhost-bridge)
-6. [Riwayat Masalah Kritis & Solusi Teknis (Troubleshooting)](#6-riwayat-masalah-kritis--solusi-teknis-troubleshooting)
-7. [Panduan Operasional Sehari-hari (Standard Operating Procedure)](#7-panduan-operasional-sehari-hari-standard-operating-procedure)
+2. [Panduan Langkah-demi-Langkah Pembuatan API & Akun Pihak Ketiga](#2-panduan-langkah-demi-langkah-pembuatan-api--akun-pihak-ketiga)
+   - [A. Meta for Developers (Instagram DM Webhook & Access Token)](#a-meta-for-developers-instagram-dm-webhook--access-token)
+   - [B. Telegram Bot API (BotFather & Chat ID Notifikasi)](#b-telegram-bot-api-botfather--chat-id-notifikasi)
+   - [C. Groq Cloud AI Console (Otak CS & Whisper Audio Transcriber)](#c-groq-cloud-ai-console-otak-cs--whisper-audio-transcriber)
+   - [D. Google AI Studio (Gemini Brain Fallback)](#d-google-ai-studio-gemini-brain-fallback)
+   - [E. Supabase Database Cloud (Tabel Leads & Shorts Queue)](#e-supabase-database-cloud-tabel-leads--shorts-queue)
+   - [F. Vercel Cloud Deployment & Environment Variables](#f-vercel-cloud-deployment--environment-variables)
+3. [Ekosistem Kunci & Konfigurasi Lingkungan (.env.local)](#3-ekosistem-kunci--konfigurasi-lingkungan-envlocal)
+4. [Divisi CS Client Auto-Responder (Instagram DM & Telegram)](#4-divisi-cs-client-auto-responder-instagram-dm--telegram)
+5. [Divisi Pabrik YouTube Shorts Islamic (Z-Code Auto-Editor)](#5-divisi-pabrik-youtube-shorts-islamic-z-code-auto-editor)
+6. [Infrastruktur Dashboard & Localhost Bridge](#6-infrastruktur-dashboard--localhost-bridge)
+7. [Riwayat Masalah Kritis & Solusi Teknis (Troubleshooting)](#7-riwayat-masalah-kritis--solusi-teknis-troubleshooting)
+8. [Panduan Operasional Sehari-hari (Standard Operating Procedure)](#8-panduan-operasional-sehari-hari-standard-operating-procedure)
 
 ---
 
@@ -25,7 +32,162 @@
 
 ---
 
-## 2. EKOSISTEM KUNCI & KONFIGURASI LINGKUNGAN (.env.local)
+## 2. PANDUAN LANGKAH-DEMI-LANGKAH PEMBUATAN API & AKUN PIHAK KETIGA
+
+### A. Meta for Developers (Instagram DM Webhook & Access Token)
+Untuk menghubungkan akun Instagram Bisnis `@at_heart.digital` agar DM yang masuk bisa dibaca dan dibalas otomatis oleh AI:
+
+1. **Persiapan Akun Instagram & Facebook:**
+   - Ubah akun Instagram `@at_heart.digital` menjadi **Akun Profesional / Bisnis**.
+   - Buat satu **Halaman Facebook (Facebook Page)** untuk bisnis lu (misal: "At Heart Digital").
+   - Sambungkan Akun Instagram tersebut ke Halaman Facebook melalui menu *Settings > Linked Accounts* di Facebook/Instagram.
+2. **Membuat App di Portal Meta Developers:**
+   - Buka browser dan login ke: `https://developers.facebook.com/`.
+   - Klik **My Apps** > **Create App**.
+   - Pilih tipe aplikasi: **Other** > pilih jenis **Business**.
+   - Isi Nama Aplikasi (misal: `AI-Empire-CS-Bot`), lalu masukkan email lu dan klik **Create App**.
+3. **Menambahkan Produk Instagram Graph API:**
+   - Di Dashboard Meta App, scroll ke bawah dan temukan produk **Instagram** / **Messenger API for Instagram**, lalu klik **Set Up**.
+4. **Membuat Page Access Token Permanen (Long-Lived Token):**
+   - Buka menu **Graph API Explorer** (`https://developers.facebook.com/tools/explorer/`).
+   - Pada kolom *Meta App*, pilih aplikasi lu (`AI-Empire-CS-Bot`).
+   - Pada kolom *User or Page*, pilih Halaman Facebook yang tersambung dengan Instagram lu.
+   - Tambahkan Permissions (Izin Akses):
+     - `instagram_basic`
+     - `instagram_manage_messages`
+     - `pages_manage_metadata`
+     - `pages_read_engagement`
+   - Klik **Generate Access Token**, setujui popup Facebook.
+   - Ubah token menjadi permanen (*Long-Lived Token*) via Access Token Tool agar tidak kedaluwarsa setelah 2 jam.
+   - Masukkan token ini ke `.env.local` sebagai: `INSTAGRAM_ACCESS_TOKEN`.
+5. **Mengatur Webhook Instagram:**
+   - Di dashboard Meta App lu, buka menu **Webhooks** (atau di tab Instagram > Webhooks).
+   - Klik **Edit Subscription** pada objek *Instagram*:
+     - **Callback URL:** Masukkan URL Vercel lu: `https://ai-empire-dashboard.vercel.app/api/social-webhook`
+     - **Verify Token:** Masukkan teks rahasia yang sama dengan di file `.env.local`, yaitu: `verifikasi_cs_ai_2026`.
+     - Klik **Verify and Save**.
+   - Di daftar *Subscription Fields*, centang dan subscribe ke event: **`messages`** dan **`messaging_postbacks`**.
+
+---
+
+### B. Telegram Bot API (BotFather & Chat ID Notifikasi)
+Digunakan untuk menerima notifikasi chat leads CS dan menerima kiriman file video Shorts yang selesai dirender.
+
+1. **Membuat Bot Telegram Baru:**
+   - Buka aplikasi Telegram di HP/Laptop lu, cari akun resmi: **`@BotFather`** (dengan centang biru).
+   - Kirim perintah: `/newbot`.
+   - Masukkan nama bot (misal: `CS Bisnisku Notifier`).
+   - Masukkan username bot (harus berakhiran `bot`, misal: `@cs_bisnisku_2026_bot`).
+   - BotFather akan memberikan **HTTP API Token**, contohnya:
+     `9049336740:AAGcKj_MrzyUTvsFD13wRp7y9x7tkhafLlg`
+   - Simpan token ini di `.env.local` sebagai: `TELEGRAM_BOT_TOKEN`.
+2. **Mendapatkan Chat ID Pribadi Lu:**
+   - Cari bot Telegram bernama: **`@userinfobot`** atau **`@myidbot`**.
+   - Klik **Start** / kirim pesan apa saja.
+   - Bot akan membalas dengan nomor ID unik akun Telegram lu (angka 9–10 digit, misal: `7885596077`).
+   - Simpan nomor ini di `.env.local` sebagai: `TELEGRAM_CHANNEL_ID` dan `TELEGRAM_CHAT_ID`.
+3. **Aktivasi Bot:**
+   - Cari bot yang baru lu buat (`@cs_bisnisku_2026_bot`) di Telegram lu, lalu klik tombol **START**. (Langkah ini wajib agar bot punya izin mengirim pesan ke lu).
+
+---
+
+### C. Groq Cloud AI Console (Otak CS & Whisper Audio Transcriber)
+Digunakan untuk auto-reply CS tercepat di dunia (Llama 3.3 / GPT-OSS) serta transkripsi audio video Shorts kata-per-kata secara gratis.
+
+1. **Mendaftar & Membuat API Key di Groq:**
+   - Buka browser dan kunjungi: `https://console.groq.com/`.
+   - Login menggunakan akun Google / GitHub lu.
+   - Di menu sebelah kiri, klik menu **API Keys**.
+   - Klik tombol **+ Create API Key**.
+   - Beri nama (misal: `AI-Empire-Key`).
+   - Salin kunci API yang muncul (berawalan `gsk_...`).
+   - Masukkan ke `.env.local` sebagai: `GROQ_API_KEY`.
+2. **Model yang Digunakan di Proyek Ini:**
+   - **`whisper-large-v3`**: Untuk ekstraksi teks dari audio MP3 video Shorts dengan akurasi tinggi dan format kata-per-kata (`word timestamps`).
+   - **`openai/gpt-oss-120b`**: Untuk merangkum transkrip menjadi Deskripsi YouTube + Hashtag viral.
+   - **`llama-3.3-70b-versatile`**: Untuk auto-responder CS Instagram DM.
+
+---
+
+### D. Google AI Studio (Gemini Brain Fallback)
+Digunakan sebagai otak cadangan (fallback) otomatis jika kuota token Groq sedang padat.
+
+1. **Mendapatkan Gemini API Key:**
+   - Kunjungi portal: `https://aistudio.google.com/`.
+   - Login menggunakan akun Google Anda.
+   - Klik tombol biru **Get API key** di pojok kiri atas.
+   - Klik **Create API key in new project**.
+   - Salin API key yang dihasilkan dan simpan di `.env.local` sebagai: `GEMINI_API_KEY`.
+
+---
+
+### E. Supabase Database Cloud (Tabel Leads & Shorts Queue)
+Digunakan sebagai database cloud sinkronisasi real-time antara dashboard online Vercel dan worker render di laptop lokal.
+
+1. **Membuat Proyek Supabase:**
+   - Kunjungi: `https://supabase.com/` dan login dengan akun GitHub lu.
+   - Klik **New Project**, beri nama `ai-empire-db`, tentukan database password, lalu pilih region terdekat (misal: Singapore).
+2. **Mengambil Kredensial URL & API Key:**
+   - Di dashboard proyek Supabase, klik ikon **Settings (Gear)** > **API**.
+   - Salin **Project URL** (contoh: `https://nktfkwwrtuwqvtkcrnra.supabase.co`) ➔ simpan ke `NEXT_PUBLIC_SUPABASE_URL`.
+   - Salin **Project API Keys (anon / public)** ➔ simpan ke `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+   - Salin **Project API Keys (service_role / secret)** ➔ simpan ke `SUPABASE_SERVICE_ROLE_KEY`.
+3. **Membuat Tabel yang Diperlukan:**
+   - Buka menu **SQL Editor** di Supabase, lalu jalankan query tabel berikut:
+   ```sql
+   -- Tabel untuk CS Leads Instagram DM
+   create table social_chat_leads (
+     id uuid primary key default gen_random_uuid(),
+     platform text not null default 'Instagram',
+     sender_handle text not null,
+     sender_name text,
+     incoming_message text not null,
+     ai_auto_reply text,
+     intent_category text,
+     status text default 'Auto_Replied',
+     telegram_notified boolean default false,
+     response_time_sec integer default 1,
+     created_at timestamp with time zone default now()
+   );
+
+   -- Tabel untuk Antrean & Riwayat Render Video Shorts
+   create table youtube_shorts_queue (
+     id uuid primary key default gen_random_uuid(),
+     niche text not null default 'Islamic',
+     title text not null,
+     hook_text text,
+     full_script text,
+     reference_video_url text,
+     style_preset text,
+     sfx_and_motion_notes text,
+     engine_used text,
+     status text default 'Queued_For_Laptop',
+     revision_notes text,
+     revision_version integer default 1,
+     telegram_message_url text,
+     created_at timestamp with time zone default now()
+   );
+   ```
+
+---
+
+### F. Vercel Cloud Deployment & Environment Variables
+Digunakan untuk menayangkan dashboard secara online 24/7 dan menerima Webhook Meta tanpa mengharuskan laptop menyala terus-menerus.
+
+1. **Menghubungkan Repositori GitHub ke Vercel:**
+   - Buka `https://vercel.com/` dan login menggunakan akun GitHub lu.
+   - Klik **Add New...** > **Project**.
+   - Pilih repositori `AI-Empire-System`.
+   - Pada kolom *Framework Preset*, pilih **Next.js**.
+   - Pada bagian **Root Directory**, pilih folder `ai-empire-dashboard`.
+2. **Memasukkan Environment Variables di Vercel:**
+   - Buka tab **Environment Variables** sebelum klik Deploy.
+   - Masukkan seluruh isi variabel dari file `.env.local` (terutama `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `GROQ_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHANNEL_ID`, `SOCIAL_WEBHOOK_VERIFY_TOKEN`, `INSTAGRAM_ACCESS_TOKEN`).
+   - Klik **Deploy**. Selesai!
+
+---
+
+## 3. EKOSISTEM KUNCI & KONFIGURASI LINGKUNGAN (.env.local)
 
 File konfigurasi utama terletak di: `d:\AI-Empire-System\ai-empire-dashboard\.env.local`
 
@@ -67,7 +229,7 @@ CRON_SECRET="rahasia_cron_morning_briefing_2026"
 
 ---
 
-## 3. DIVISI CS CLIENT AUTO-RESPONDER (INSTAGRAM DM & TELEGRAM)
+## 4. DIVISI CS CLIENT AUTO-RESPONDER (INSTAGRAM DM & TELEGRAM)
 
 ### A. Alur Kerja Meta Developer & Webhook
 1. **Penerimaan Pesan:** Calon pembeli mengirim DM ke Instagram `@at_heart.digital`.
@@ -81,7 +243,7 @@ CRON_SECRET="rahasia_cron_morning_briefing_2026"
 
 ---
 
-## 4. DIVISI PABRIK YOUTUBE SHORTS ISLAMIC (Z-CODE AUTO-EDITOR)
+## 5. DIVISI PABRIK YOUTUBE SHORTS ISLAMIC (Z-CODE AUTO-EDITOR)
 
 Fitur ini fokus untuk mendongkrak channel **@islamic-short-513** (Target: 465 ➔ 10.000 Subs). Seluruh logika master berada di:
 `D:\AI-Empire-System\ai-empire-dashboard\local-agent-bridge\build_zcode_perfect_pipeline.py`
@@ -113,7 +275,7 @@ Fitur ini fokus untuk mendongkrak channel **@islamic-short-513** (Target: 465 �
 
 ---
 
-## 5. INFRASTRUKTUR DASHBOARD & LOCALHOST BRIDGE
+## 6. INFRASTRUKTUR DASHBOARD & LOCALHOST BRIDGE
 
 ### A. File Peluncur Otomatis: `JALANKAN_AI_EMPIRE.bat`
 Berada di root `D:\AI-Empire-System\JALANKAN_AI_EMPIRE.bat`. Script ini berfungsi untuk:
@@ -134,7 +296,7 @@ Berada di root `D:\AI-Empire-System\JALANKAN_AI_EMPIRE.bat`. Script ini berfungs
 
 ---
 
-## 6. RIWAYAT MASALAH KRITIS & SOLUSI TEKNIS (TROUBLESHOOTING)
+## 7. RIWAYAT MASALAH KRITIS & SOLUSI TEKNIS (TROUBLESHOOTING)
 
 1. **Error 413 Payload Too Large di Vercel:**
    - *Penyebab:* Batas bawaan serverless Vercel untuk request body adalah 4.5 MB, sedangkan file video mentah berukuran 50–200 MB.
@@ -151,7 +313,7 @@ Berada di root `D:\AI-Empire-System\JALANKAN_AI_EMPIRE.bat`. Script ini berfungs
 
 ---
 
-## 7. PANDUAN OPERASIONAL SEHARI-HARI (SOP)
+## 8. PANDUAN OPERASIONAL SEHARI-HARI (SOP)
 
 1. **Menyalakan Laptop & Membuka Dashboard:**
    - Cukup klik 2x file `JALANKAN_AI_EMPIRE.bat` di desktop / folder project.
