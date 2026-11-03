@@ -657,7 +657,9 @@ def process_one_job(force_latest: bool = False):
     log(f"🚀 Memproses Video: [{niche}] '{item.get('title')}'")
 
     if niche == "Islamic":
+        import importlib
         import build_zcode_perfect_pipeline as zcode
+        importlib.reload(zcode)
         title = item.get("title", "TIDAK ADA TAKDIR YANG SALAH\nEKSPEKTASI KITA YANG SALAH")
         source = item.get("source_channel") or "YNTV"
         queue_id = item.get("id", "")

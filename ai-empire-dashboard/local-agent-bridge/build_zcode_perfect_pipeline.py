@@ -280,78 +280,77 @@ def generate_split_cover(raw_video: str, title: str, out_cover: str):
         return both_detected * 800.0 + (c_l + c_r) * 3.0 + (dark_l + dark_r) * 2.0
 
     closeup_samples = []
-    wide_samples = []
-    max_scan_sec = min(int(duration) - 1, 130)
-    scan_points = list(range(1, max_scan_sec, 3))
+    two_shot_frames = []
 
-    scale_w, scale_h = 640, 360
-    scale_x = W / float(scale_w)
-    scale_y = H / float(scale_h)
+    # Pindai detik demi detik (1s, 2s, 3s, ... s/d 60s) untuk mendeteksi perubahan scene & pembicara
+    max_scan_sec = min(int(duration) - 1, 60)
+    scan_points = list(range(1, max_scan_sec + 1))
 
     for sec in scan_points:
         cap.set(cv2.CAP_PROP_POS_MSEC, float(sec) * 1000)
         ret, frame = cap.read()
         if not ret:
             continue
-        small_frame = cv2.resize(frame, (scale_w, scale_h))
-        small_gray = cv2.cvtColor(small_frame, cv2.COLOR_BGR2GRAY)
-        s_faces = face_cascade.detectMultiScale(small_gray, 1.12, 3, minSize=(16, 16))
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(gray, 1.15, 4, minSize=(40, 40))
 
-        faces = [(int(fx * scale_x), int(fy * scale_y), int(fw * scale_x), int(fh * scale_y)) for (fx, fy, fw, fh) in s_faces]
+        # 1. Deteksi Scene Wide / Dua Orang Bersama (Studio Two-Shot)
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        green_mask = cv2.inRange(hsv, (35, 40, 40), (85, 255, 255))
+        green_pct = (cv2.countNonZero(green_mask) / (W * H)) * 100
 
-        # 1. Check if frame has closeup (w >= 140 and top half)
-        big_faces = [f for f in faces if f[2] >= 140 and 80 <= f[1] <= int(H * 0.45)]
-        if big_faces:
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        left_faces = [f for f in faces if (f[0] + f[2] // 2) < W * 0.45]
+        right_faces = [f for f in faces if (f[0] + f[2] // 2) > W * 0.55]
+
+        if (len(left_faces) > 0 and len(right_faces) > 0) or (len(faces) >= 2 and green_pct > 25) or (green_pct > 35 and len(faces) >= 1 and faces[0][2] < 120):
+            sharpness = cv2.Laplacian(gray, cv2.CV_64F).var()
+            two_shot_frames.append({
+                "sec": sec,
+                "frame": frame.copy(),
+                "sharpness": sharpness
+            })
+
+        # 2. Deteksi Scene Close-up (Satu orang dominan)
+        big_faces = [f for f in faces if f[2] >= 150 and 70 <= f[1] <= int(H * 0.48)]
+        if big_faces and len(faces) <= 2:
             bf = sorted(big_faces, key=lambda f: f[2] * f[3], reverse=True)[0]
-            score = evaluate_eye_openness(gray, bf)
-            bg_patch = frame[:int(H * 0.25), :int(W * 0.25)]
-            bg_hsv = cv2.cvtColor(bg_patch, cv2.COLOR_BGR2HSV)
-            bg_hist = cv2.calcHist([bg_hsv], [0, 1], None, [16, 16], [0, 180, 0, 256])
-            cv2.normalize(bg_hist, bg_hist)
+            fx, fy, fw, fh = bf
+            face_crop = cv2.resize(gray[fy : fy + fh, fx : fx + fw], (100, 100))
+            torso_h = get_clothing_hist(frame, bf)
+            eye_score = evaluate_eye_openness(gray, bf)
             closeup_samples.append({
                 "sec": sec,
                 "frame": frame.copy(),
                 "face": bf,
-                "score": score,
-                "bg_hist": bg_hist
+                "face_crop": face_crop,
+                "torso_hist": torso_h,
+                "score": eye_score
             })
-        else:
-            # 2. Frame has NO closeup -> Candidate for TRUE studio wide shot!
-            small_faces = [f for f in faces if 35 <= f[2] <= 90 and 150 <= f[1] <= int(H * 0.60)]
-            hsv_top = cv2.cvtColor(frame[:int(H * 0.4), :], cv2.COLOR_BGR2HSV)
-            green_mask = cv2.inRange(hsv_top, (35, 40, 40), (85, 255, 255))
-            green_pct = (cv2.countNonZero(green_mask) / (green_mask.size)) * 100
-            if len(small_faces) >= 1 and green_pct > 35:
-                right_faces = [f for f in small_faces if (f[0] + f[2]//2) > W * 0.55]
-                sharpness = cv2.Laplacian(small_gray, cv2.CV_64F).var()
-                wide_samples.append({
-                    "sec": sec,
-                    "frame": frame.copy(),
-                    "faces": small_faces,
-                    "right_faces": right_faces,
-                    "green_pct": green_pct,
-                    "sharpness": sharpness
-                })
 
     cap.release()
 
     if not closeup_samples:
         raise RuntimeError("Gagal menemukan wajah pembicara dari video input.")
 
+    # Pembicara 1: Close-up dengan ketajaman & keterbukaan mata terbaik
     speaker1 = max(closeup_samples, key=lambda s: s["score"])
     print(f"✅ Pembicara 1 (Guest/Closeup) dipilih pada detik ke-{speaker1['sec']}s (Eye Score: {speaker1['score']:.1f})")
 
+    # Pembicara 2: Deteksi perpindahan scene ke pembicara lain yang GENUINE berbeda
     speaker2_img = None
-    other_closeup_candidates = []
-    for s in closeup_samples:
-        bg_sim = cv2.compareHist(speaker1["bg_hist"], s["bg_hist"], cv2.HISTCMP_CORREL)
-        # Pembicara kedua genuine dalam interview/podcast WAJIB memiliki angle kamera / background berbeda
-        if bg_sim < 0.45:
-            other_closeup_candidates.append((s, bg_sim))
+    distinct_closeups = []
+    for c in closeup_samples:
+        if c["sec"] == speaker1["sec"]:
+            continue
+        corr = cv2.matchTemplate(speaker1["face_crop"], c["face_crop"], cv2.TM_CCOEFF_NORMED)[0][0]
+        torso_sim = cv2.compareHist(speaker1["torso_hist"], c["torso_hist"], cv2.HISTCMP_CORREL) if (speaker1["torso_hist"] is not None and c["torso_hist"] is not None) else 0.0
 
-    if other_closeup_candidates:
-        best_cand = max(other_closeup_candidates, key=lambda x: x[0]["score"])[0]
+        # Pembicara lain yang berbeda WAJIB memiliki fitur wajah berbeda (corr < 0.35) DAN pakaian berbeda (torso_sim < 0.65)
+        if corr < 0.35 and torso_sim < 0.65:
+            distinct_closeups.append((c, corr, torso_sim))
+
+    if distinct_closeups:
+        best_cand = max(distinct_closeups, key=lambda x: x[0]["score"])[0]
         print(f"✅ Ditemukan closeup pembicara 2 yang BERBEDA pada detik ke-{best_cand['sec']}s (Score: {best_cand['score']:.1f})")
         
         y_margin = int(H * 0.04)
@@ -362,41 +361,29 @@ def generate_split_cover(raw_video: str, title: str, out_cover: str):
         rx = max(0, min(W - crop_w, cx - crop_w // 2))
         sub = best_cand["frame"][y_margin : y_margin + crop_h, rx : rx + crop_w]
         speaker2_img = cv2.resize(sub, (1080, 960), interpolation=cv2.INTER_LANCZOS4)
+    elif two_shot_frames:
+        best_wide = max(two_shot_frames, key=lambda t: t["sharpness"])
+        print(f"🎬 Mengekstrak Pembicara 2 (Host/Wendi) dari Wide Shot Studio pada detik ke-{best_wide['sec']}s (Sharpness: {best_wide['sharpness']:.1f})...")
+        w_frame = best_wide["frame"]
+        crop_h = int(H * 0.75)
+        crop_w = int(crop_h * (1080 / 960))
+        ry = int(H * 0.16)
+        rx = int(W - crop_w - 40)
+        sub = w_frame[ry : ry + crop_h, rx : rx + crop_w]
+        speaker2_img = cv2.resize(sub, (1080, 960), interpolation=cv2.INTER_LANCZOS4)
+        print("✅ Berhasil mengekstrak pembicara 2 dari sofa studio!")
     else:
-        print("ℹ️ Video berformat monolog/hanya 1 pembicara closeup. Mengekstrak Pembicara 2 (Host/Wendi) dari TRUE WIDE SHOT studio...")
-        wide_with_right = [w for w in wide_samples if len(w["right_faces"]) > 0]
-        if wide_with_right:
-            best_wide = sorted(wide_with_right, key=lambda w: w["sharpness"], reverse=True)[0]
-            w_frame = best_wide["frame"]
-            rf = best_wide["right_faces"][0]
-            rcx = rf[0] + rf[2] // 2
-            rcy = rf[1] + rf[2] // 2
-            print(f"🎬 Wide shot dengan wajah Host dipilih pada detik ke-{best_wide['sec']}s: koordinat wajah ({rcx}, {rcy})")
-            crop_h = int(H * 0.65)
-            crop_w = int(crop_h * (1080 / 960))
-            rx = max(0, min(W - crop_w, rcx - crop_w // 2))
-            ry = max(0, min(H - crop_h, rcy - int(crop_h * 0.28)))
-            sub = w_frame[ry : ry + crop_h, rx : rx + crop_w]
-            speaker2_img = cv2.resize(sub, (1080, 960), interpolation=cv2.INTER_LANCZOS4)
-            print("✅ Berhasil mengekstrak pembicara 2 (Host/Wendi) tepat di tengah!")
-        elif wide_samples:
-            best_wide = sorted(wide_samples, key=lambda w: w["sharpness"], reverse=True)[0]
-            w_frame = best_wide["frame"]
-            print(f"🎬 Wide shot terbaik dipilih pada detik ke-{best_wide['sec']}s (Couch coordinates)")
-            crop_h = int(H * 0.65)
-            crop_w = int(crop_h * (1080 / 960))
-            ry = int(H * 0.18)
-            rx = int(W * 0.60)
-            sub = w_frame[ry : ry + crop_h, rx : rx + crop_w]
-            speaker2_img = cv2.resize(sub, (1080, 960), interpolation=cv2.INTER_LANCZOS4)
-            print("✅ Berhasil mengekstrak pembicara 2 dari sofa studio!")
-        else:
-            crop_h = int(H * 0.65)
-            crop_w = int(crop_h * (1080 / 960))
-            ry = int(H * 0.18)
-            rx = int(W * 0.60)
-            sub = speaker1["frame"][ry : ry + crop_h, rx : rx + crop_w]
-            speaker2_img = cv2.resize(sub, (1080, 960), interpolation=cv2.INTER_LANCZOS4)
+        print("ℹ️ Menggunakan koordinat studio sofa fallback...")
+        cap2 = cv2.VideoCapture(raw_video)
+        cap2.set(cv2.CAP_PROP_POS_MSEC, 20000)
+        _, f_couch = cap2.read()
+        cap2.release()
+        crop_h = int(H * 0.75)
+        crop_w = int(crop_h * (1080 / 960))
+        ry = int(H * 0.16)
+        rx = int(W - crop_w - 40)
+        sub = f_couch[ry : ry + crop_h, rx : rx + crop_w]
+        speaker2_img = cv2.resize(sub, (1080, 960), interpolation=cv2.INTER_LANCZOS4)
 
     # Crop Pembicara 1 (Closeup Speaker 1)
     y_margin = int(H * 0.04)
@@ -413,11 +400,12 @@ def generate_split_cover(raw_video: str, title: str, out_cover: str):
     canvas = np.vstack([top_half, bot_half])
     cover_pil = Image.fromarray(cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB))
 
-    # Center Yellow Card Banner
+    # Center Black Glass + Yellow Card Banner (Sesuai Referensi Dua Warna)
     card_w = 940
     card_h = 240
     card_x = (1080 - card_w) // 2
     card_y = 960 - (card_h // 2)
+    y_mid = card_y + (card_h // 2)
     radius = 42
 
     shadow_layer = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
@@ -428,8 +416,14 @@ def generate_split_cover(raw_video: str, title: str, out_cover: str):
 
     card_layer = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
     c_draw = ImageDraw.Draw(card_layer)
-    c_draw.rounded_rectangle([card_x, card_y, card_x + card_w, card_y + card_h], radius=radius, fill=(255, 230, 0, 255), outline=(0, 0, 0, 255), width=5)
-    c_draw.rounded_rectangle([card_x + 5, card_y + 5, card_x + card_w - 5, card_y + card_h // 2], radius=radius, fill=(255, 255, 255, 45))
+    # 1. Paruh Atas: Hitam Glassmorphism Semi-Transparan
+    c_draw.rounded_rectangle([card_x, card_y, card_x + card_w, y_mid], radius=radius, corners=(True, True, False, False), fill=(18, 20, 24, 235))
+    c_draw.rounded_rectangle([card_x + 4, card_y + 3, card_x + card_w - 4, card_y + 35], radius=radius - 4, corners=(True, True, False, False), fill=(255, 255, 255, 35))
+    # 2. Paruh Bawah: Kuning Terang Solid
+    c_draw.rounded_rectangle([card_x, y_mid, card_x + card_w, card_y + card_h], radius=radius, corners=(False, False, True, True), fill=(255, 225, 0, 255))
+    # 3. Garis Tepi & Pemisah Hitam Pekat
+    c_draw.rounded_rectangle([card_x, card_y, card_x + card_w, card_y + card_h], radius=radius, outline=(0, 0, 0, 255), width=5)
+    c_draw.line([(card_x, y_mid), (card_x + card_w, y_mid)], fill=(0, 0, 0, 255), width=5)
     cover_pil.paste(card_layer, (0, 0), card_layer)
 
     draw = ImageDraw.Draw(cover_pil)
@@ -516,12 +510,19 @@ def generate_animated_cover_segment(top_half, bot_half, title: str, hook_audio_p
     s_layer = s_layer.filter(ImageFilter.GaussianBlur(16))
     card_asset.paste(s_layer, (0, 0), s_layer)
 
-    # Yellow Card Body
+    # Black Glass + Yellow Card Body (Sesuai Referensi Dua Warna)
     c_draw = ImageDraw.Draw(card_asset)
-    c_draw.rounded_rectangle([margin, margin, margin + card_w, margin + card_h], radius=42, fill=(255, 230, 0, 255), outline=(0, 0, 0, 255), width=5)
-    c_draw.rounded_rectangle([margin + 5, margin + 5, margin + card_w - 5, margin + card_h // 2], radius=42, fill=(255, 255, 255, 45))
+    y_mid_asset = margin + card_h // 2
+    # 1. Paruh Atas: Hitam Glassmorphism Semi-Transparan
+    c_draw.rounded_rectangle([margin, margin, margin + card_w, y_mid_asset], radius=42, corners=(True, True, False, False), fill=(18, 20, 24, 235))
+    c_draw.rounded_rectangle([margin + 4, margin + 3, margin + card_w - 4, margin + 35], radius=38, corners=(True, True, False, False), fill=(255, 255, 255, 35))
+    # 2. Paruh Bawah: Kuning Terang Solid
+    c_draw.rounded_rectangle([margin, y_mid_asset, margin + card_w, margin + card_h], radius=42, corners=(False, False, True, True), fill=(255, 225, 0, 255))
+    # 3. Garis Tepi & Pemisah Hitam Pekat
+    c_draw.rounded_rectangle([margin, margin, margin + card_w, margin + card_h], radius=42, outline=(0, 0, 0, 255), width=5)
+    c_draw.line([(margin, y_mid_asset), (margin + card_w, y_mid_asset)], fill=(0, 0, 0, 255), width=5)
 
-    # Text on Card
+    # Text on Card (Keduanya teks putih dengan stroke hitam pekat)
     font_size = 68
     try:
         font = ImageFont.truetype("impact.ttf", font_size)
@@ -539,7 +540,7 @@ def generate_animated_cover_segment(top_half, bot_half, title: str, hook_audio_p
     y2 = margin + (card_h // 2) + (card_h // 2 - h2) // 2 - 6
 
     c_draw.text((x1, y1), line1, font=font, fill=(255, 255, 255), stroke_width=7, stroke_fill=(0, 0, 0))
-    c_draw.text((x2, y2), line2, font=font, fill=(0, 0, 0), stroke_width=4, stroke_fill=(255, 255, 255))
+    c_draw.text((x2, y2), line2, font=font, fill=(255, 255, 255), stroke_width=7, stroke_fill=(0, 0, 0))
 
     temp_video = out_clip_path.replace(".mp4", "_temp_raw.mp4")
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
