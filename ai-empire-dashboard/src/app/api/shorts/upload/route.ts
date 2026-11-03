@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import { exec } from "child_process";
+import { spawn } from "child_process";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
@@ -62,19 +62,27 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Jalankan pipeline editing Z-Code secara asynchronous di laptop
+    // Jalankan pipeline editing Z-Code secara asynchronous di laptop menggunakan spawn
     const pythonScript = path.join(bridgeDir, "build_zcode_perfect_pipeline.py");
-    const queueIdArg = queueItem?.id ? ` --queue-id "${queueItem.id}"` : "";
-    const cmd = `python "${pythonScript}" --input "${inputVideoPath}" --title "${title.replace(/"/g, '\\"')}" --source "${sourceChannel}" --caption-style "${captionStyle}" --source-url "${sourceUrl.replace(/"/g, '\\"')}"${queueIdArg}`;
+    const args = [
+      pythonScript,
+      "--input", inputVideoPath,
+      "--title", title,
+      "--source", sourceChannel,
+      "--caption-style", captionStyle,
+      "--source-url", sourceUrl,
+    ];
+    if (queueItem?.id) {
+      args.push("--queue-id", queueItem.id);
+    }
 
-    console.log(`[Z-Code Trigger] Menjalankan: ${cmd}`);
-    exec(cmd, { cwd: bridgeDir }, (err, stdout, stderr) => {
-      if (err) {
-        console.error("[Z-Code Error]:", stderr || err.message);
-      } else {
-        console.log("[Z-Code Selesai]:", stdout);
-      }
+    console.log(`[Z-Code Trigger] Menjalankan python ${args.join(" ")}`);
+    const child = spawn("python", args, {
+      cwd: bridgeDir,
+      detached: true,
+      stdio: "ignore",
     });
+    child.unref();
 
     return NextResponse.json({
       ok: true,

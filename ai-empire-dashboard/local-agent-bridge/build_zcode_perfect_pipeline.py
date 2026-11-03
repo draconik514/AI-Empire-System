@@ -61,17 +61,21 @@ def update_queue_progress(queue_id: str, status: str, hook_text: str = None, ful
     if not queue_id:
         return
     supabase_key = ""
+    supabase_url = ""
     env_file = os.path.join(DASHBOARD_DIR, ".env.local")
     if os.path.exists(env_file):
         with open(env_file, "r", encoding="utf-8") as f:
             for line in f:
                 if line.startswith("NEXT_PUBLIC_SUPABASE_ANON_KEY="):
-                    supabase_key = line.strip().split("=", 1)[1].strip().strip('"')
-                    break
+                    supabase_key = line.strip().split("=", 1)[1].strip().strip('"\'')
+                elif line.startswith("NEXT_PUBLIC_SUPABASE_URL="):
+                    supabase_url = line.strip().split("=", 1)[1].strip().strip('"\'')
+    if not supabase_url:
+        supabase_url = "https://nktfkwwrtuwqvtkcrnra.supabase.co"
     if not supabase_key:
         return
 
-    url = f"https://zfgcwyfqymxvyzckkdtx.supabase.co/rest/v1/youtube_shorts_queue?id=eq.{queue_id}"
+    url = f"{supabase_url}/rest/v1/youtube_shorts_queue?id=eq.{queue_id}"
     payload = {"status": status}
     if hook_text is not None:
         payload["hook_text"] = hook_text
@@ -367,23 +371,6 @@ def generate_split_cover(raw_video: str, title: str, out_cover: str):
     canvas = np.vstack([top_half, bot_half])
     cover_pil = Image.fromarray(cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB))
 
-    # Emojis di luar shape rectangle
-    emojis_str = get_contextual_emojis_for_title(title)
-    try:
-        emoji_font = ImageFont.truetype(r"C:\Windows\Fonts\seguiemj.ttf", 44)
-    except:
-        emoji_font = ImageFont.load_default()
-
-    e_img = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
-    e_draw = ImageDraw.Draw(e_img)
-    pill_x, pill_y, pill_w, pill_h = 680, 755, 300, 70
-    e_draw.rounded_rectangle([pill_x, pill_y, pill_x + pill_w, pill_y + pill_h], radius=25, fill=(0, 0, 0, 185), outline=(255, 230, 0, 220), width=3)
-    try:
-        e_draw.text((pill_x + 35, pill_y + 10), emojis_str, font=emoji_font, embedded_color=True)
-    except:
-        e_draw.text((pill_x + 35, pill_y + 10), emojis_str, font=emoji_font, fill=(255, 255, 255))
-    cover_pil.paste(e_img, (0, 0), e_img)
-
     # Center Yellow Card Banner
     card_w = 940
     card_h = 240
@@ -468,23 +455,6 @@ def generate_animated_cover_segment(top_half, bot_half, title: str, hook_audio_p
     base_split = np.vstack([top_half, bot_half])
     base_pil = Image.fromarray(cv2.cvtColor(base_split, cv2.COLOR_BGR2RGB))
 
-    # Emojis di luar shape
-    emojis_str = get_contextual_emojis_for_title(title)
-    try:
-        emoji_font = ImageFont.truetype(r"C:\Windows\Fonts\seguiemj.ttf", 44)
-    except:
-        emoji_font = ImageFont.load_default()
-
-    e_img = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
-    e_draw = ImageDraw.Draw(e_img)
-    pill_x, pill_y, pill_w, pill_h = 680, 755, 300, 70
-    e_draw.rounded_rectangle([pill_x, pill_y, pill_x + pill_w, pill_y + pill_h], radius=25, fill=(0, 0, 0, 185), outline=(255, 230, 0, 220), width=3)
-    try:
-        e_draw.text((pill_x + 35, pill_y + 10), emojis_str, font=emoji_font, embedded_color=True)
-    except:
-        e_draw.text((pill_x + 35, pill_y + 10), emojis_str, font=emoji_font, fill=(255, 255, 255))
-    base_pil.paste(e_img, (0, 0), e_img)
-
     clean_title = title.replace("\\n", " ").replace("\n", " ").strip()
     words = clean_title.split()
     mid = len(words) // 2
@@ -560,9 +530,10 @@ def generate_animated_cover_segment(top_half, bot_half, title: str, hook_audio_p
         "ffmpeg", "-y",
         "-i", temp_video,
         "-i", hook_audio_path,
-        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "30",
+        "-c:v", "libx264", "-preset", "ultrafast",
+        "-b:v", "380k", "-maxrate", "500k", "-bufsize", "1000k",
         "-r", "30",
-        "-c:a", "aac", "-b:a", "128k", "-ar", "44100", "-ac", "2",
+        "-c:a", "aac", "-b:a", "64k", "-ar", "44100", "-ac", "2",
         "-pix_fmt", "yuv420p",
         "-shortest",
         out_clip_path
@@ -847,12 +818,12 @@ def render_and_upload(raw_video: str, title: str, source_channel: str, queue_id:
         "-af", "volume=1.35,highpass=f=80,lowpass=f=12000",
         "-c:v", "libx264",
         "-preset", "ultrafast",
-        "-crf", "30",
-        "-maxrate", "1600k",
-        "-bufsize", "3200k",
+        "-b:v", "380k",
+        "-maxrate", "500k",
+        "-bufsize", "1000k",
         "-r", "30",
         "-c:a", "aac",
-        "-b:a", "128k",
+        "-b:a", "64k",
         "-ar", "44100",
         "-ac", "2",
         "-pix_fmt", "yuv420p",
@@ -940,8 +911,11 @@ def render_and_upload(raw_video: str, title: str, source_channel: str, queue_id:
     caption_header += "\n📝 DESKRIPSI & HASHTAG SIAP POST:\n────────────────────\n"
     caption = (caption_header + yt_desc_hashtags)[:1020]
 
+    tg_sent_ok = False
+    tg_response_text = ""
+
     cmd_curl = [
-        "curl.exe", "-sS", "--retry", "3", "--max-time", "180",
+        "curl.exe", "-sS", "--retry", "2", "--max-time", "300",
         "-X", "POST", url,
         "-F", f"chat_id={TELEGRAM_CHAT_ID}",
         "-F", f"video=@{output_mp4}",
@@ -949,23 +923,14 @@ def render_and_upload(raw_video: str, title: str, source_channel: str, queue_id:
     ]
     try:
         res = subprocess.run(cmd_curl, capture_output=True, text=True)
-        print("Telegram response:", res.stdout[:200])
+        tg_response_text = res.stdout
+        print("Telegram response (curl):", tg_response_text[:200])
+        if '"ok":true' in tg_response_text.replace(" ", ""):
+            tg_sent_ok = True
+    except Exception as curl_err:
+        print("⚠️ curl.exe gagal:", curl_err)
 
-        if "413" in res.stdout or "Too Large" in res.stdout:
-            print("⚠️ Telegram menolak file (terlalu besar), mengompres ulang dengan cepat...")
-            compressed_mp4 = output_mp4.replace(".mp4", "_comp_retry.mp4")
-            cmd_comp = [
-                "ffmpeg", "-y", "-i", output_mp4,
-                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "34", "-maxrate", "1800k", "-bufsize", "3600k",
-                "-c:a", "copy", compressed_mp4
-            ]
-            subprocess.run(cmd_comp, check=True)
-            if os.path.exists(compressed_mp4):
-                os.replace(compressed_mp4, output_mp4)
-                size_mb = os.path.getsize(output_mp4) / (1024 * 1024)
-                res = subprocess.run(cmd_curl, capture_output=True, text=True)
-                print("Telegram retry response:", res.stdout[:200])
-
+    try:
         try:
             requests.post(
                 f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
@@ -979,10 +944,10 @@ def render_and_upload(raw_video: str, title: str, source_channel: str, queue_id:
         except Exception as msg_err:
             print("⚠️ Gagal mengirim pesan teks deskripsi terpisah:", msg_err)
 
-        if '"ok":true' in res.stdout.replace(" ", ""):
+        if tg_sent_ok or '"ok":true' in tg_response_text.replace(" ", ""):
             tg_link = "https://t.me/cs_bisnisku_2026_bot"
             try:
-                resp_data = json.loads(res.stdout)
+                resp_data = json.loads(tg_response_text)
                 msg_id = resp_data.get("result", {}).get("message_id")
                 if msg_id:
                     tg_link = f"https://t.me/c/{TELEGRAM_CHAT_ID}/{msg_id}"
