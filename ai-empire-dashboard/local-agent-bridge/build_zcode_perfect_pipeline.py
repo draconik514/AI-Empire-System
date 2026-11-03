@@ -276,26 +276,32 @@ def generate_split_cover(raw_video: str, title: str, out_cover: str):
 
         faces = [(int(fx * scale_x), int(fy * scale_y), int(fw * scale_x), int(fh * scale_y)) for (fx, fy, fw, fh) in s_faces]
 
-        # 1. Closeup detection (w >= 140px)
-        big_faces = [f for f in faces if f[2] >= 140 and f[1] < int(H * 0.55)]
+        # 1. Closeup detection (w >= 160px, must be real head in top half: 80 <= fy <= 0.45*H)
+        big_faces = [f for f in faces if f[2] >= 160 and 80 <= f[1] <= int(H * 0.45)]
         if big_faces:
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             bf = sorted(big_faces, key=lambda f: f[2] * f[3], reverse=True)[0]
             score = evaluate_eye_openness(gray, bf)
-            hist = get_clothing_hist(frame, bf)
+            bg_patch = frame[:int(H * 0.25), :int(W * 0.25)]
+            bg_hsv = cv2.cvtColor(bg_patch, cv2.COLOR_BGR2HSV)
+            bg_hist = cv2.calcHist([bg_hsv], [0, 1], None, [16, 16], [0, 180, 0, 256])
+            cv2.normalize(bg_hist, bg_hist)
             closeup_samples.append({
                 "sec": sec,
                 "frame": frame.copy(),
                 "face": bf,
-                "hist": hist,
-                "score": score
+                "score": score,
+                "bg_hist": bg_hist
             })
 
-        # 2. Wide shot detection (multiple faces OR small faces OR peripheral faces)
-        small_faces = [f for f in faces if 45 <= f[2] <= 140]
-        right_faces = [f for f in faces if (f[0] + f[2]//2) > W * 0.52]
-        left_faces = [f for f in faces if (f[0] + f[2]//2) < W * 0.48]
-        if len(faces) >= 2 or len(small_faces) >= 1 or len(right_faces) >= 1:
+        # 2. Studio Wide shot detection (multiple faces OR small faces di area studio)
+        small_faces = [f for f in faces if 35 <= f[2] <= 130 and 100 <= f[1] <= int(H * 0.65)]
+        right_faces = [f for f in faces if (f[0] + f[2]//2) > W * 0.55]
+        left_faces = [f for f in faces if (f[0] + f[2]//2) < W * 0.40]
+        if len(faces) >= 2 or len(small_faces) >= 1:
+            hsv_top = cv2.cvtColor(frame[:int(H * 0.4), :], cv2.COLOR_BGR2HSV)
+            green_mask = cv2.inRange(hsv_top, (35, 40, 40), (85, 255, 255))
+            green_pct = (cv2.countNonZero(green_mask) / (green_mask.size)) * 100
             sharpness = cv2.Laplacian(small_gray, cv2.CV_64F).var()
             wide_samples.append({
                 "sec": sec,
@@ -303,6 +309,7 @@ def generate_split_cover(raw_video: str, title: str, out_cover: str):
                 "faces": faces,
                 "right_faces": right_faces,
                 "left_faces": left_faces,
+                "green_pct": green_pct,
                 "sharpness": sharpness
             })
 
@@ -312,18 +319,19 @@ def generate_split_cover(raw_video: str, title: str, out_cover: str):
         raise RuntimeError("Gagal menemukan wajah pembicara dari video input.")
 
     speaker1 = max(closeup_samples, key=lambda s: s["score"])
-    print(f"✅ Pembicara 1 dipilih pada detik ke-{speaker1['sec']}s (Eye Score: {speaker1['score']:.1f})")
+    print(f"✅ Pembicara 1 (Guest/Closeup) dipilih pada detik ke-{speaker1['sec']}s (Eye Score: {speaker1['score']:.1f})")
 
     speaker2_img = None
     other_closeup_candidates = []
     for s in closeup_samples:
-        sim = cv2.compareHist(speaker1["hist"], s["hist"], cv2.HISTCMP_CORREL)
-        if sim < 0.60:
-            other_closeup_candidates.append((s, sim))
+        bg_sim = cv2.compareHist(speaker1["bg_hist"], s["bg_hist"], cv2.HISTCMP_CORREL)
+        # Pembicara kedua genuine dalam interview/podcast WAJIB memiliki angle kamera / background berbeda
+        if bg_sim < 0.45:
+            other_closeup_candidates.append((s, bg_sim))
 
     if other_closeup_candidates:
-        best_cand, best_sim = max(other_closeup_candidates, key=lambda x: x[0]["score"])
-        print(f"✅ Ditemukan closeup pembicara 2 yang BERBEDA pada detik ke-{best_cand['sec']}s (Sim: {best_sim:.2f}, Score: {best_cand['score']:.1f})")
+        best_cand = max(other_closeup_candidates, key=lambda x: x[0]["score"])[0]
+        print(f"✅ Ditemukan closeup pembicara 2 yang BERBEDA pada detik ke-{best_cand['sec']}s (Score: {best_cand['score']:.1f})")
         
         y_margin = int(H * 0.04)
         crop_h = H - 2 * y_margin
@@ -334,19 +342,20 @@ def generate_split_cover(raw_video: str, title: str, out_cover: str):
         sub = best_cand["frame"][y_margin : y_margin + crop_h, rx : rx + crop_w]
         speaker2_img = cv2.resize(sub, (1080, 960), interpolation=cv2.INTER_LANCZOS4)
     else:
-        print("⚠️ Video berformat monolog/hanya 1 closeup. Mengekstrak pembicara 2 dari WIDE SHOT...")
+        print("ℹ️ Video berformat monolog/hanya 1 pembicara closeup. Mengekstrak Pembicara 2 (Host/Wendi) dari WIDE SHOT studio...")
         if wide_samples:
-            best_wide = sorted(wide_samples, key=lambda w: (len(w["right_faces"]) > 0, w["sharpness"]), reverse=True)[0]
+            # Cari wide shot studio terbaik dengan wall studio dan ketajaman tinggi
+            best_wide = sorted(wide_samples, key=lambda w: (w.get("green_pct", 0) > 20, len(w["right_faces"]) > 0, w["sharpness"]), reverse=True)[0]
             w_frame = best_wide["frame"]
-            print(f"🎬 Wide shot terbaik dipilih pada detik ke-{best_wide['sec']}s (Sharpness: {best_wide['sharpness']:.1f})")
+            print(f"🎬 Wide shot studio terbaik dipilih pada detik ke-{best_wide['sec']}s (Green: {best_wide.get('green_pct', 0):.1f}%, Sharpness: {best_wide['sharpness']:.1f})")
             
             crop_h = int(H * 0.65)
             crop_w = int(crop_h * (1080 / 960))
             ry = int(H * 0.18)
-            rx = int(W * 0.60)
+            rx = int(W * 0.59)
             sub = w_frame[ry : ry + crop_h, rx : rx + crop_w]
             speaker2_img = cv2.resize(sub, (1080, 960), interpolation=cv2.INTER_LANCZOS4)
-            print("✅ Berhasil mengekstrak pembicara 2 dari wide shot studio!")
+            print("✅ Berhasil mengekstrak pembicara 2 (Host) dari sofa studio!")
         else:
             y_margin = int(H * 0.04)
             crop_h = H - 2 * y_margin
@@ -530,10 +539,10 @@ def generate_animated_cover_segment(top_half, bot_half, title: str, hook_audio_p
         "ffmpeg", "-y",
         "-i", temp_video,
         "-i", hook_audio_path,
-        "-c:v", "libx264", "-preset", "ultrafast",
-        "-b:v", "380k", "-maxrate", "500k", "-bufsize", "1000k",
+        "-c:v", "libx264", "-preset", "veryfast",
+        "-crf", "20", "-maxrate", "4000k", "-bufsize", "8000k",
         "-r", "30",
-        "-c:a", "aac", "-b:a", "64k", "-ar", "44100", "-ac", "2",
+        "-c:a", "aac", "-b:a", "160k", "-ar", "44100", "-ac", "2",
         "-pix_fmt", "yuv420p",
         "-shortest",
         out_clip_path
@@ -559,22 +568,19 @@ def transcribe_with_whisper(raw_video: str, words_json_path: str):
         print("⚠️ GROQ_API_KEY tidak ditemukan di .env.local, transkripsi dilewati.")
         return []
 
-    print(f"⚡ Mengirim audio ke Groq Whisper ({os.path.getsize(audio_path)/(1024*1024):.2f} MB)...")
-    url = "https://api.groq.com/openai/v1/audio/transcriptions"
-    with open(audio_path, "rb") as f:
-        resp = requests.post(
-            url,
-            headers={"Authorization": f"Bearer {groq_key}"},
-            files={"file": ("audio.mp3", f, "audio/mpeg")},
-            data=[
-                ("model", "whisper-large-v3"),
-                ("response_format", "verbose_json"),
-                ("timestamp_granularities[]", "word"),
-                ("timestamp_granularities[]", "segment"),
-                ("language", "id")
-            ],
-            timeout=120
-        )
+    print(f"⚡ Mengirim audio ke Groq Whisper via curl.exe ({os.path.getsize(audio_path)/(1024*1024):.2f} MB)...")
+    cmd_whisper = [
+        "curl.exe", "-sS", "--retry", "3", "--max-time", "120",
+        "-X", "POST", "https://api.groq.com/openai/v1/audio/transcriptions",
+        "-H", f"Authorization: Bearer {groq_key}",
+        "-F", f"file=@{audio_path}",
+        "-F", "model=whisper-large-v3",
+        "-F", "response_format=verbose_json",
+        "-F", "timestamp_granularities[]=word",
+        "-F", "timestamp_granularities[]=segment",
+        "-F", "language=id"
+    ]
+    res = subprocess.run(cmd_whisper, capture_output=True, text=True)
 
     try:
         if os.path.exists(audio_path):
@@ -582,7 +588,11 @@ def transcribe_with_whisper(raw_video: str, words_json_path: str):
     except:
         pass
 
-    data = resp.json()
+    try:
+        data = json.loads(res.stdout)
+    except Exception as e:
+        print("⚠️ Gagal parse JSON Whisper:", e, res.stdout[:200])
+        data = {}
     if "words" in data:
         with open(words_json_path, "w", encoding="utf-8") as out:
             json.dump(data, out, ensure_ascii=False, indent=2)
@@ -801,10 +811,11 @@ def render_and_upload(raw_video: str, title: str, source_channel: str, queue_id:
 
     main_filter = (
         "[0:v]crop=606:1078:650:0,scale=1080:1920:flags=bicubic[vmain];"
-        "[vmain][1:v]overlay=45:55[vwithchannel];"
+        "[vmain]unsharp=5:5:0.7:5:5:0.0[vsharp];"
+        "[vsharp][1:v]overlay=45:55[vwithchannel];"
         f"[vwithchannel][2:v]overlay=360:1730[vwithbadge];"
         f"[vwithbadge]subtitles=filename='{escaped_ass}'[vwithsub];"
-        "[vwithsub]eq=contrast=1.12:brightness=0.01:saturation=1.18[vout]"
+        "[vwithsub]eq=contrast=1.06:brightness=0.01:saturation=1.12[vout]"
     )
 
     cmd_main = [
@@ -817,13 +828,13 @@ def render_and_upload(raw_video: str, title: str, source_channel: str, queue_id:
         "-map", "0:a",
         "-af", "volume=1.35,highpass=f=80,lowpass=f=12000",
         "-c:v", "libx264",
-        "-preset", "ultrafast",
-        "-b:v", "380k",
-        "-maxrate", "500k",
-        "-bufsize", "1000k",
+        "-preset", "veryfast",
+        "-crf", "20",
+        "-maxrate", "4000k",
+        "-bufsize", "8000k",
         "-r", "30",
         "-c:a", "aac",
-        "-b:a", "64k",
+        "-b:a", "160k",
         "-ar", "44100",
         "-ac", "2",
         "-pix_fmt", "yuv420p",
@@ -865,10 +876,10 @@ def render_and_upload(raw_video: str, title: str, source_channel: str, queue_id:
             "-map", "[vcat]",
             "-map", "[acat]",
             "-c:v", "libx264",
-            "-preset", "ultrafast",
-            "-crf", "26",
+            "-preset", "veryfast",
+            "-crf", "20",
             "-c:a", "aac",
-            "-b:a", "128k",
+            "-b:a", "160k",
             "-pix_fmt", "yuv420p",
             output_mp4
         ]
@@ -882,7 +893,7 @@ def render_and_upload(raw_video: str, title: str, source_channel: str, queue_id:
         compressed_mp4 = output_mp4.replace(".mp4", "_compressed.mp4")
         cmd_comp = [
             "ffmpeg", "-y", "-i", output_mp4,
-            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "32", "-maxrate", "2200k", "-bufsize", "4400k",
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-maxrate", "2800k", "-bufsize", "5600k",
             "-c:a", "copy", compressed_mp4
         ]
         subprocess.run(cmd_comp, check=True)
