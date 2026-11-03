@@ -683,12 +683,19 @@ def main():
 
     input_vid = args.input
     if not input_vid or not os.path.exists(input_vid):
-        # Fallback input_video.mp4 or default raw video
+        # 1. Fallback input_video.mp4
         candidate = os.path.join(WORK_DIR, "input_video.mp4")
         if os.path.exists(candidate):
             input_vid = candidate
         else:
-            input_vid = DEFAULT_RAW_VIDEO
+            # 2. Otomatis deteksi rekaman layar TERBARU yang ada di folder Screen Recordings
+            import glob
+            rec_files = glob.glob(r"C:\Users\draconik\Videos\Screen Recordings\*.mp4")
+            if rec_files:
+                input_vid = max(rec_files, key=os.path.getmtime)
+                print(f"📹 Mengambil video rekaman layar TERBARU: {input_vid}")
+            else:
+                input_vid = DEFAULT_RAW_VIDEO
 
     print(f"▶️ Memulai proses dengan video: {input_vid}")
     print(f"🏷️ Title Cover: {args.title}")

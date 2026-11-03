@@ -660,18 +660,24 @@ def process_one_job(force_latest: bool = False):
         import build_zcode_perfect_pipeline as zcode
         title = item.get("title", "TIDAK ADA TAKDIR YANG SALAH\nEKSPEKTASI KITA YANG SALAH")
         source = item.get("source_channel") or "YNTV"
+        queue_id = item.get("id", "")
+        
+        # 1. Cek file input_video.mp4 di workspace
         input_vid = os.path.join(WORK_DIR, "input_video.mp4")
+        # 2. Jika tidak ada, otomatis ambil video rekaman layar TERBARU yang ada di folder Screen Recordings!
         if not os.path.exists(input_vid):
-            input_vid = zcode.DEFAULT_RAW_VIDEO
+            import glob
+            rec_pattern = r"C:\Users\draconik\Videos\Screen Recordings\*.mp4"
+            all_recs = glob.glob(rec_pattern)
+            if all_recs:
+                input_vid = max(all_recs, key=os.path.getmtime)
+                log(f"📹 Menggunakan video rekaman layar terbaru yang baru saja direkam: {input_vid}")
+            else:
+                input_vid = zcode.DEFAULT_RAW_VIDEO
 
         log(f"🎬 Menjalankan Master Islamic Z-Code Pipeline dengan video: {input_vid}...")
-        zcode.render_and_upload(input_vid, title, source)
+        zcode.render_and_upload(input_vid, title, source, queue_id)
 
-        supabase_update_status(
-            item["id"],
-            "Review_in_Telegram",
-            extra={"engine_used": "Islamic Z-Code V3 (Split Cover 2 Speakers + Glass Watermark + Word-Level ASS + CapCut HD)"}
-        )
         log("🎉 Alur produksi video Islamic Z-Code selesai! Silakan cek Telegram Anda.")
         return True
 
