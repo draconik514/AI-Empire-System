@@ -661,6 +661,8 @@ def process_one_job(force_latest: bool = False):
         title = item.get("title", "TIDAK ADA TAKDIR YANG SALAH\nEKSPEKTASI KITA YANG SALAH")
         source = item.get("source_channel") or "YNTV"
         queue_id = item.get("id", "")
+        caption_style = item.get("caption_style") or "yellow"
+        source_url = item.get("reference_video_url") or item.get("source_url") or ""
         
         # 1. Cek file input_video.mp4 di workspace
         input_vid = os.path.join(WORK_DIR, "input_video.mp4")
@@ -675,8 +677,15 @@ def process_one_job(force_latest: bool = False):
             else:
                 input_vid = zcode.DEFAULT_RAW_VIDEO
 
-        log(f"🎬 Menjalankan Master Islamic Z-Code Pipeline dengan video: {input_vid}...")
-        zcode.render_and_upload(input_vid, title, source, queue_id)
+        log(f"🎬 Menjalankan Master Islamic Z-Code Pipeline dengan video: {input_vid} (Style: {caption_style})...")
+        zcode.render_and_upload(
+            input_vid,
+            title,
+            source,
+            queue_id,
+            caption_style=caption_style,
+            source_url=source_url
+        )
 
         log("🎉 Alur produksi video Islamic Z-Code selesai! Silakan cek Telegram Anda.")
         return True

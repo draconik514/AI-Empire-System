@@ -2,11 +2,14 @@ import os
 import sys
 import json
 import time
+import math
+import asyncio
 import argparse
 import subprocess
 import requests
 import cv2
 import numpy as np
+import edge_tts
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -16,56 +19,73 @@ BASE_DIR = r"D:\AI-Empire-System"
 DASHBOARD_DIR = os.path.join(BASE_DIR, "ai-empire-dashboard")
 BRIDGE_DIR = os.path.join(DASHBOARD_DIR, "local-agent-bridge")
 WORK_DIR = os.path.join(BRIDGE_DIR, "render_workspace")
+ASSETS_DIR = os.path.join(BRIDGE_DIR, "assets")
 DEFAULT_RAW_VIDEO = r"C:\Users\draconik\Videos\Screen Recordings\Screen Recording 2026-11-01 210741.mp4"
 
 TELEGRAM_TOKEN = "9049336740:AAGcKj_MrzyUTvsFD13wRp7y9x7tkhafLlg"
 TELEGRAM_CHAT_ID = "7885596077"
 
+EMOJI_KEYWORD_MAP = {
+    # Kota / Tempat
+    "JAKARTA": "🏙️", "INDONESIA": "🇮🇩", "KOTA": "🏙️", "KANTOR": "🏢", "RUMAH": "🏠", "MASJID": "🕌",
+    # Emosi & Hati
+    "HATI": "❤️", "JIWA": "🤍", "TENANG": "🕊️", "DAMAI": "🕊️", "SABAR": "🤲", "IKHLAS": "🤲",
+    "MARAH": "😡", "EMOSI": "😤", "KESAL": "😤", "SEDIH": "🥺", "MENANGIS": "😭", "LUKA": "💔",
+    "SENANG": "😊", "BAHAGIA": "✨", "TERTAWA": "😂",
+    # Rezeki & Uang
+    "REZEKI": "💰", "UANG": "💵", "HARTA": "💎", "KAYA": "💸", "MISKIN": "🥺",
+    # Kematian & Akhirat
+    "MATI": "💀", "WAFAT": "🥀", "KUBUR": "🪦", "AKHIRAT": "⏳", "SURGA": "✨", "NERAKA": "🔥",
+    "DOSA": "⚠️", "PAHALA": "🤲",
+    # Ibadah & Ketuhanan
+    "ALLAH": "☝️", "DOA": "🤲", "SHOLAT": "🕌", "SUJUD": "🤲", "BERSYUKUR": "🙏", "ALHAMDULILLAH": "🤲",
+    # Waktu & Alam
+    "WAKTU": "⏰", "JAM": "⏱️", "MALAM": "🌙", "SIANG": "☀️", "BUMI": "🌍", "DUNIA": "🌍",
+    # Peringatan & Lainnya
+    "BAHAYA": "⚠️", "INGAT": "🧠", "SALAH": "❌", "BENAR": "✅", "API": "🔥", "BOM": "💣", "VIRAL": "🔥"
+}
+
 def get_groq_key() -> str:
     env_file = os.path.join(DASHBOARD_DIR, ".env.local")
     if os.path.exists(env_file):
         with open(env_file, "r", encoding="utf-8") as f:
-            for l in f:
-                if l.startswith("GROQ_API_KEY="):
-                    return l.split("=", 1)[1].strip().strip('"').strip("'")
+            for line in f:
+                if line.startswith("GROQ_API_KEY="):
+                    k = line.strip().split("=", 1)[1].strip().strip('"')
+                    if k and not k.startswith("gsk_your_"):
+                        return k
     return os.environ.get("GROQ_API_KEY", "")
 
-def get_supabase_config():
-    url = os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "")
-    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "") or os.environ.get("NEXT_PUBLIC_SUPABASE_ANON_KEY", "")
+def update_queue_progress(queue_id: str, status: str, hook_text: str = None, full_script: str = None, telegram_url: str = None):
+    """Sinkronisasi status pengerjaan secara real-time ke Dashboard Supabase"""
+    if not queue_id:
+        return
+    supabase_key = ""
     env_file = os.path.join(DASHBOARD_DIR, ".env.local")
     if os.path.exists(env_file):
         with open(env_file, "r", encoding="utf-8") as f:
-            for l in f:
-                if l.startswith("NEXT_PUBLIC_SUPABASE_URL="):
-                    url = l.split("=", 1)[1].strip().strip('"').strip("'")
-                elif l.startswith("SUPABASE_SERVICE_ROLE_KEY="):
-                    key = l.split("=", 1)[1].strip().strip('"').strip("'")
-                elif l.startswith("NEXT_PUBLIC_SUPABASE_ANON_KEY=") and not key:
-                    key = l.split("=", 1)[1].strip().strip('"').strip("'")
-    return url, key
+            for line in f:
+                if line.startswith("NEXT_PUBLIC_SUPABASE_ANON_KEY="):
+                    supabase_key = line.strip().split("=", 1)[1].strip().strip('"')
+                    break
+    if not supabase_key:
+        return
 
-def update_queue_progress(queue_id: str, status: str, hook_text: str, full_script: str = None, telegram_url: str = None):
-    """Update status & log aktivitas secara live ke tabel youtube_shorts_queue di Supabase"""
-    if not queue_id:
-        return
-    sb_url, sb_key = get_supabase_config()
-    if not sb_url or not sb_key:
-        return
-    payload = {
-        "status": status,
-        "hook_text": hook_text,
-    }
+    url = f"https://zfgcwyfqymxvyzckkdtx.supabase.co/rest/v1/youtube_shorts_queue?id=eq.{queue_id}"
+    payload = {"status": status}
+    if hook_text is not None:
+        payload["hook_text"] = hook_text
     if full_script is not None:
         payload["full_script"] = full_script
     if telegram_url is not None:
         payload["telegram_message_url"] = telegram_url
+
     try:
         requests.patch(
-            f"{sb_url}/rest/v1/youtube_shorts_queue?id=eq.{queue_id}",
+            url,
             headers={
-                "apikey": sb_key,
-                "Authorization": f"Bearer {sb_key}",
+                "apikey": supabase_key,
+                "Authorization": f"Bearer {supabase_key}",
                 "Content-Type": "application/json",
                 "Prefer": "return=minimal"
             },
@@ -73,64 +93,94 @@ def update_queue_progress(queue_id: str, status: str, hook_text: str, full_scrip
             timeout=10
         )
     except Exception as e:
-        print("⚠️ Gagal update progress Supabase:", e)
+        print(f"⚠️ Gagal update progress Supabase: {e}")
 
 def format_ass_time(sec: float) -> str:
-    sec = max(0.0, sec)
     h = int(sec // 3600)
     m = int((sec % 3600) // 60)
-    s = int(sec % 60)
-    cs = int(round((sec - int(sec)) * 100))
-    if cs >= 100:
-        cs = 99
-    return f"{h:01d}:{m:02d}:{s:02d}.{cs:02d}"
+    s = sec % 60
+    return f"{h}:{m:02d}:{s:05.2f}"
+
+def get_contextual_emojis_for_title(title: str) -> str:
+    """Memilih emoji yang paling pas di luar shape title cover sesuai konteks bahasan"""
+    t = title.lower()
+    if any(w in t for w in ["marah", "azab", "dihukum", "bahaya", "takut", "murka", "peringatan"]):
+        return "😱  💔  ⚠️"
+    if any(w in t for w in ["hati", "tenang", "damai", "ikhlas", "sabar", "sembuh", "syukur"]):
+        return "🥺  🤍  🕊️"
+    if any(w in t for w in ["rezeki", "uang", "kaya", "harta", "bisnis", "cuan", "sukses"]):
+        return "💸  💰  ✨"
+    if any(w in t for w in ["mati", "wafat", "akhirat", "kubur", "dosa", "neraka", "kiamat", "ajal"]):
+        return "🥀  ⏳  🤲"
+    if any(w in t for w in ["sombong", "iri", "dengki", "kecewa", "sedih", "menangis"]):
+        return "🫢  💔  🥺"
+    if any(w in t for w in ["doa", "sholat", "allah", "hijrah", "islam", "surga"]):
+        return "🤲  ✨  ☝️"
+    return "😱  💥  👀"
+
+def generate_channel_watermark(out_path: str):
+    """Menghasilkan watermark logo Al-Qur'an dan nama 'short-islamic' di kiri atas video (hanya muncul setelah cover)"""
+    logo_file = os.path.join(ASSETS_DIR, "quran_logo.png")
+    badge_w = 200
+    badge_h = 160
+    badge = Image.new("RGBA", (badge_w, badge_h), (0, 0, 0, 0))
+
+    if os.path.exists(logo_file):
+        logo = Image.open(logo_file).convert("RGBA")
+        logo_resized = logo.resize((84, 84), Image.Resampling.LANCZOS)
+        logo_x = (badge_w - 84) // 2
+        logo_y = 10
+
+        shadow = Image.new("RGBA", (badge_w, badge_h), (0, 0, 0, 0))
+        s_draw = ImageDraw.Draw(shadow)
+        s_draw.ellipse((logo_x - 3, logo_y - 1, logo_x + 87, logo_y + 89), fill=(0, 0, 0, 160))
+        shadow = shadow.filter(ImageFilter.GaussianBlur(6))
+        badge.paste(shadow, (0, 0), shadow)
+        badge.paste(logo_resized, (logo_x, logo_y), logo_resized)
+
+    draw = ImageDraw.Draw(badge)
+    font_size = 22
+    try:
+        font = ImageFont.truetype("arialbd.ttf", font_size)
+    except:
+        font = ImageFont.load_default()
+
+    text = "short-islamic"
+    bbox = draw.textbbox((0, 0), text, font=font)
+    tw = bbox[2] - bbox[0]
+    th = bbox[3] - bbox[1]
+    tx = (badge_w - tw) // 2
+    ty = 84 + 10 + 10
+
+    draw.rounded_rectangle([tx - 10, ty - 4, tx + tw + 10, ty + th + 6], radius=10, fill=(0, 0, 0, 150))
+    draw.text((tx, ty), text, font=font, fill=(255, 255, 255, 255), stroke_width=2, stroke_fill=(0, 0, 0, 220))
+
+    badge.save(out_path)
+    print(f"✅ Watermark YouTube Channel disimpan: {out_path}")
 
 def generate_glass_badge(source_channel: str, out_path: str):
-    """Menghasilkan badge YouTube glassmorphism 100% kapsul (pill shape)"""
-    W, H = 1440, 360
-    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    m_x, m_y = 40, 30
-    pill_w = W - 2 * m_x
-    pill_h = H - 2 * m_y
-    radius = pill_h // 2
-
-    # Drop shadow
-    shadow_img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    s_draw = ImageDraw.Draw(shadow_img)
-    s_draw.rounded_rectangle([m_x, m_y + 12, m_x + pill_w, m_y + pill_h + 12], radius=radius, fill=(0, 0, 0, 160))
-    shadow_img = shadow_img.filter(ImageFilter.GaussianBlur(16))
-    img = Image.alpha_composite(img, shadow_img)
-
-    # Dark glass body
-    draw = ImageDraw.Draw(img)
-    draw.rounded_rectangle([m_x, m_y, m_x + pill_w, m_y + pill_h], radius=radius, fill=(18, 20, 26, 220))
-
-    # Top highlight
-    glass_shine = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    g_draw = ImageDraw.Draw(glass_shine)
-    g_draw.rounded_rectangle([m_x + 4, m_y + 4, m_x + pill_w - 4, m_y + pill_h // 2], radius=radius, fill=(255, 255, 255, 28))
-    glass_shine = glass_shine.filter(ImageFilter.GaussianBlur(4))
-    img = Image.alpha_composite(img, glass_shine)
+    """Menghasilkan watermark badge YouTube Glassmorphism dengan logo merah YouTube & teks tebal"""
+    w, h = 720, 180
+    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    # Glass border
-    draw.rounded_rectangle([m_x, m_y, m_x + pill_w, m_y + pill_h], radius=radius, outline=(255, 255, 255, 65), width=6)
+    draw.rounded_rectangle([10, 10, w - 10, h - 10], radius=45, fill=(15, 15, 15, 205), outline=(255, 255, 255, 70), width=4)
+    draw.rounded_rectangle([15, 15, w - 15, (h // 2)], radius=40, fill=(255, 255, 255, 30))
 
-    # Red YouTube circular icon
-    icon_r = 90
-    cx = m_x + radius + 15
-    cy = m_y + pill_h // 2
-    draw.ellipse([cx - icon_r, cy - icon_r, cx + icon_r, cy + icon_r], fill=(235, 20, 35, 255))
+    cx = 100
+    cy = h // 2
+    icon_r = 50
+    draw.ellipse([cx - icon_r, cy - icon_r, cx + icon_r, cy + icon_r], fill=(225, 15, 15, 255), outline=(255, 255, 255, 160), width=3)
 
-    tri_size = 42
+    tri_w = 32
+    tri_h = 40
     points = [
-        (cx - tri_size // 2 + 6, cy - tri_size),
-        (cx - tri_size // 2 + 6, cy + tri_size),
-        (cx + tri_size + 6, cy)
+        (cx - tri_w // 2 + 5, cy - tri_h // 2),
+        (cx - tri_w // 2 + 5, cy + tri_h // 2),
+        (cx + tri_w // 2 + 6, cy)
     ]
     draw.polygon(points, fill=(255, 255, 255, 255))
 
-    # Text Source
     try:
         font = ImageFont.truetype("impact.ttf", 150)
     except:
@@ -151,8 +201,8 @@ def generate_glass_badge(source_channel: str, out_path: str):
     print(f"✅ Glassmorphism watermark disimpan: {out_path}")
 
 def generate_split_cover(raw_video: str, title: str, out_cover: str):
-    """Mengekstrak 2 pembicara UTAMA yang BERBEDA (mata terbuka & wajah utuh) untuk Split-Screen Cover 1080x1920.
-    Jika video hanya memiliki 1 pembicara closeup (monolog podcast), pembicara kedua otomatis diekstrak dari wide-shot sudut host."""
+    """Mengekstrak 2 pembicara UTAMA yang BERBEDA untuk Split-Screen Cover 1080x1920 dengan emoji luar shape.
+    Mengembalikan (top_half, bot_half) berupa gambar numpy BGR 1080x960."""
     print("📸 Mengekstrak 2 pembicara berbeda (mata terbuka & wajah utuh) dari video asli untuk cover...")
     face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
     eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_eye.xml")
@@ -202,7 +252,6 @@ def generate_split_cover(raw_video: str, title: str, out_cover: str):
         dark_r = 255.0 - float(np.percentile(right_half, 5))
         return both_detected * 800.0 + (c_l + c_r) * 3.0 + (dark_l + dark_r) * 2.0
 
-    # Sampling menyeluruh mulai dari detik ke-0 (agar hook pembicara pertama di awal video tidak terlewat)
     closeup_samples = []
     wide_samples = []
     max_scan_sec = min(int(duration) - 1, 135)
@@ -250,14 +299,10 @@ def generate_split_cover(raw_video: str, title: str, out_cover: str):
     if not closeup_samples:
         raise RuntimeError("Gagal menemukan wajah pembicara dari video input.")
 
-    # Pembicara 1: Ambil closeup terbaik (mata paling terbuka)
     speaker1 = max(closeup_samples, key=lambda s: s["score"])
     print(f"✅ Pembicara 1 dipilih pada detik ke-{speaker1['sec']}s (Eye Score: {speaker1['score']:.1f})")
 
     speaker2_img = None
-
-    # Cek apakah ada pembicara kedua dalam kumpulan CLOSEUP yang benar-benar orang lain
-    # (Kemiripan pakaian / clothing similarity < 0.60)
     other_closeup_candidates = []
     for s in closeup_samples:
         sim = cv2.compareHist(speaker1["hist"], s["hist"], cv2.HISTCMP_CORREL)
@@ -277,15 +322,12 @@ def generate_split_cover(raw_video: str, title: str, out_cover: str):
         sub = best_cand["frame"][y_margin : y_margin + crop_h, rx : rx + crop_w]
         speaker2_img = cv2.resize(sub, (1080, 960), interpolation=cv2.INTER_LANCZOS4)
     else:
-        # JIKA TIDAK ADA CLOSEUP ORANG KEDUA:
-        # Ekstrak orang kedua dari WIDE SHOT (Host podcast di sebelah kanan/kiri studio)!
         print("⚠️ Video berformat monolog/hanya 1 closeup. Mengekstrak pembicara 2 dari WIDE SHOT...")
         if wide_samples:
             best_wide = sorted(wide_samples, key=lambda w: (len(w["right_faces"]) > 0, w["sharpness"]), reverse=True)[0]
             w_frame = best_wide["frame"]
             print(f"🎬 Wide shot terbaik dipilih pada detik ke-{best_wide['sec']}s (Sharpness: {best_wide['sharpness']:.1f})")
             
-            # Crop Host kanan (misal Wendi Cagur) dari wide shot
             crop_h = int(H * 0.65)
             crop_w = int(crop_h * (1080 / 960))
             ry = int(H * 0.18)
@@ -294,7 +336,6 @@ def generate_split_cover(raw_video: str, title: str, out_cover: str):
             speaker2_img = cv2.resize(sub, (1080, 960), interpolation=cv2.INTER_LANCZOS4)
             print("✅ Berhasil mengekstrak pembicara 2 dari wide shot studio!")
         else:
-            # Fallback horizontal flip jika benar-benar hanya 1 shot
             y_margin = int(H * 0.04)
             crop_h = H - 2 * y_margin
             crop_w = min(W, int(crop_h * (1080 / 960)))
@@ -312,14 +353,30 @@ def generate_split_cover(raw_video: str, title: str, out_cover: str):
     sub1 = speaker1["frame"][y_margin : y_margin + crop_h, rx1 : rx1 + crop_w]
     speaker1_img = cv2.resize(sub1, (1080, 960), interpolation=cv2.INTER_LANCZOS4)
 
-    # Susun: Pembicara 2 di ATAS, Pembicara 1 di BAWAH
+    # Gabungkan: Pembicara 2 di Atas, Pembicara 1 di Bawah
     top_half = speaker2_img
     bot_half = speaker1_img
-
     canvas = np.vstack([top_half, bot_half])
     cover_pil = Image.fromarray(cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB))
 
-    # Center Yellow Card Banner (Solid Kuning Cerah)
+    # Emojis di luar shape rectangle
+    emojis_str = get_contextual_emojis_for_title(title)
+    try:
+        emoji_font = ImageFont.truetype(r"C:\Windows\Fonts\seguiemj.ttf", 44)
+    except:
+        emoji_font = ImageFont.load_default()
+
+    e_img = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
+    e_draw = ImageDraw.Draw(e_img)
+    pill_x, pill_y, pill_w, pill_h = 680, 755, 300, 70
+    e_draw.rounded_rectangle([pill_x, pill_y, pill_x + pill_w, pill_y + pill_h], radius=25, fill=(0, 0, 0, 185), outline=(255, 230, 0, 220), width=3)
+    try:
+        e_draw.text((pill_x + 35, pill_y + 10), emojis_str, font=emoji_font, embedded_color=True)
+    except:
+        e_draw.text((pill_x + 35, pill_y + 10), emojis_str, font=emoji_font, fill=(255, 255, 255))
+    cover_pil.paste(e_img, (0, 0), e_img)
+
+    # Center Yellow Card Banner
     card_w = 940
     card_h = 240
     card_x = (1080 - card_w) // 2
@@ -339,20 +396,12 @@ def generate_split_cover(raw_video: str, title: str, out_cover: str):
     cover_pil.paste(card_layer, (0, 0), card_layer)
 
     draw = ImageDraw.Draw(cover_pil)
-
-    # Bersihkan literal \n dan bagi judul menjadi 2 baris
     clean_title = title.replace("\\n", " ").replace("\n", " ").strip()
     words = clean_title.split()
-    if len(words) <= 4:
-        mid = max(1, len(words) // 2)
-        line1 = " ".join(words[:mid]).upper()
-        line2 = " ".join(words[mid:]).upper()
-    else:
-        mid = len(words) // 2
-        line1 = " ".join(words[:mid]).upper()
-        line2 = " ".join(words[mid:]).upper()
+    mid = len(words) // 2
+    line1 = " ".join(words[:mid]).upper()
+    line2 = " ".join(words[mid:]).upper()
 
-    # Auto-fit ukuran font agar teks selalu muat rapi di dalam box kuning (card_w - 60)
     font_size = 68
     font = ImageFont.load_default()
     while font_size >= 36:
@@ -371,14 +420,12 @@ def generate_split_cover(raw_video: str, title: str, out_cover: str):
         d.text(pos, text, font=font, fill=fill_color, stroke_width=stroke_width, stroke_fill=stroke_color)
 
     b1 = draw.textbbox((0, 0), line1, font=font, stroke_width=7)
-    w1 = b1[2] - b1[0]
-    h1 = b1[3] - b1[1]
+    w1, h1 = b1[2] - b1[0], b1[3] - b1[1]
     x1 = (1080 - w1) // 2
     y1 = card_y + (card_h // 2 - h1) // 2 - 6
 
     b2 = draw.textbbox((0, 0), line2, font=font, stroke_width=7)
-    w2 = b2[2] - b2[0]
-    h2 = b2[3] - b2[1]
+    w2, h2 = b2[2] - b2[0], b2[3] - b2[1]
     x2 = (1080 - w2) // 2
     y2 = card_y + (card_h // 2) + (card_h // 2 - h2) // 2 - 6
 
@@ -387,6 +434,130 @@ def generate_split_cover(raw_video: str, title: str, out_cover: str):
 
     cover_pil.save(out_cover, quality=98)
     print(f"✅ Cover Split-Screen asli berhasil dibuat: {out_cover}")
+    return top_half, bot_half
+
+def generate_ai_voice_hook(title: str, out_mp3: str) -> float:
+    """Membuat rekaman suara AI Hook (Edge-TTS) membacakan judul cover & mengembalikan durasinya"""
+    clean_title = title.replace("\n", " ").replace(":", ", ").replace("-", " ").strip()
+    hook_text = clean_title
+
+    async def _tts():
+        comm = edge_tts.Communicate(hook_text, "id-ID-ArdiNeural", rate="+6%")
+        await comm.save(out_mp3)
+
+    asyncio.run(_tts())
+
+    cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", out_mp3]
+    dur = float(subprocess.check_output(cmd).decode().strip())
+    print(f"🎙️ AI Voice-Over Hook selesai dibuat: {dur:.2f} detik")
+    return dur
+
+def generate_animated_cover_segment(top_half, bot_half, title: str, hook_audio_path: str, duration_sec: float, out_clip_path: str):
+    """Merender video intro cover dengan durasi tepat sesuai audio AI VO Hook dan motion spring pada rectangle title"""
+    fps = 30.0
+    total_frames = max(15, int(duration_sec * fps))
+
+    base_split = np.vstack([top_half, bot_half])
+    base_pil = Image.fromarray(cv2.cvtColor(base_split, cv2.COLOR_BGR2RGB))
+
+    # Emojis di luar shape
+    emojis_str = get_contextual_emojis_for_title(title)
+    try:
+        emoji_font = ImageFont.truetype(r"C:\Windows\Fonts\seguiemj.ttf", 44)
+    except:
+        emoji_font = ImageFont.load_default()
+
+    e_img = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
+    e_draw = ImageDraw.Draw(e_img)
+    pill_x, pill_y, pill_w, pill_h = 680, 755, 300, 70
+    e_draw.rounded_rectangle([pill_x, pill_y, pill_x + pill_w, pill_y + pill_h], radius=25, fill=(0, 0, 0, 185), outline=(255, 230, 0, 220), width=3)
+    try:
+        e_draw.text((pill_x + 35, pill_y + 10), emojis_str, font=emoji_font, embedded_color=True)
+    except:
+        e_draw.text((pill_x + 35, pill_y + 10), emojis_str, font=emoji_font, fill=(255, 255, 255))
+    base_pil.paste(e_img, (0, 0), e_img)
+
+    clean_title = title.replace("\\n", " ").replace("\n", " ").strip()
+    words = clean_title.split()
+    mid = len(words) // 2
+    line1 = " ".join(words[:mid]).upper()
+    line2 = " ".join(words[mid:]).upper()
+
+    temp_video = out_clip_path.replace(".mp4", "_temp_raw.mp4")
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    writer = cv2.VideoWriter(temp_video, fourcc, fps, (1080, 1920))
+
+    for f_idx in range(total_frames):
+        t = f_idx / fps
+        # Motion animation: Spring pop-in pada 0.5s awal lalu gentle breathing pulse
+        if t < 0.5:
+            scale = 1.0 - 0.30 * math.exp(-6.0 * t) * math.cos(12.0 * t)
+        else:
+            scale = 1.0 + 0.012 * math.sin(3.5 * (t - 0.5))
+
+        frame_pil = base_pil.copy()
+        card_w = int(940 * scale)
+        card_h = int(240 * scale)
+        card_x = (1080 - card_w) // 2
+        card_y = 960 - (card_h // 2)
+        radius = int(42 * scale)
+
+        # Shadow
+        shadow_layer = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
+        s_draw = ImageDraw.Draw(shadow_layer)
+        s_draw.rounded_rectangle([card_x, card_y + 8, card_x + card_w, card_y + card_h + 8], radius=radius, fill=(0, 0, 0, 180))
+        shadow_layer = shadow_layer.filter(ImageFilter.GaussianBlur(16))
+        frame_pil.paste(shadow_layer, (0, 0), shadow_layer)
+
+        # Yellow Card
+        card_layer = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
+        c_draw = ImageDraw.Draw(card_layer)
+        c_draw.rounded_rectangle([card_x, card_y, card_x + card_w, card_y + card_h], radius=radius, fill=(255, 230, 0, 255), outline=(0, 0, 0, 255), width=5)
+        c_draw.rounded_rectangle([card_x + 5, card_y + 5, card_x + card_w - 5, card_y + card_h // 2], radius=radius, fill=(255, 255, 255, 45))
+        frame_pil.paste(card_layer, (0, 0), card_layer)
+
+        # Text
+        draw = ImageDraw.Draw(frame_pil)
+        font_size = int(68 * scale)
+        try:
+            font = ImageFont.truetype("impact.ttf", font_size)
+        except:
+            font = ImageFont.load_default()
+
+        b1 = draw.textbbox((0, 0), line1, font=font, stroke_width=int(7 * scale))
+        w1, h1 = b1[2] - b1[0], b1[3] - b1[1]
+        x1 = (1080 - w1) // 2
+        y1 = card_y + (card_h // 2 - h1) // 2 - int(6 * scale)
+
+        b2 = draw.textbbox((0, 0), line2, font=font, stroke_width=int(7 * scale))
+        w2, h2 = b2[2] - b2[0], b2[3] - b2[1]
+        x2 = (1080 - w2) // 2
+        y2 = card_y + (card_h // 2) + (card_h // 2 - h2) // 2 - int(6 * scale)
+
+        draw.text((x1, y1), line1, font=font, fill=(255, 255, 255), stroke_width=int(7 * scale), stroke_fill=(0, 0, 0))
+        draw.text((x2, y2), line2, font=font, fill=(0, 0, 0), stroke_width=int(4 * scale), stroke_fill=(255, 255, 255))
+
+        frame_bgr = cv2.cvtColor(np.array(frame_pil), cv2.COLOR_RGB2BGR)
+        writer.write(frame_bgr)
+
+    writer.release()
+
+    # Mux dengan audio hook AI
+    cmd_mux = [
+        "ffmpeg", "-y",
+        "-i", temp_video,
+        "-i", hook_audio_path,
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "26",
+        "-c:a", "aac", "-b:a", "128k",
+        "-pix_fmt", "yuv420p",
+        "-shortest",
+        out_clip_path
+    ]
+    subprocess.run(cmd_mux, check=True)
+    if os.path.exists(temp_video):
+        try: os.remove(temp_video)
+        except: pass
+    print(f"✅ Video intro cover motion berhasil dibuat: {out_clip_path}")
 
 def transcribe_with_whisper(raw_video: str, words_json_path: str):
     """Ekstrak audio asli & transkrip per kata via Groq Whisper secara akurat"""
@@ -436,8 +607,11 @@ def transcribe_with_whisper(raw_video: str, words_json_path: str):
         print("⚠️ Response Whisper tanpa words:", data.get("error", data))
         return []
 
-def build_subtitles(words_json_path: str, ass_path: str):
-    """Membuat file subtitle ASS sinkron per kata"""
+def build_subtitles(words_json_path: str, ass_path: str, caption_style: str = "yellow"):
+    """Membuat file subtitle ASS sinkron suara dengan 3 pilihan gaya:
+    1. 'yellow': Kuning Punch Z-Code
+    2. 'green_emoji': Hijau Neon + Emoji Kontekstual otomatis di atas kata penting
+    3. 'monochrome': Putih Bersih Minimalis"""
     if not os.path.exists(words_json_path):
         print("⚠️ File transkrip kata tidak ditemukan.")
         return
@@ -455,13 +629,17 @@ ScaledBorderAndShadow: yes
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: SubtitleStyle,Impact,78,&H00FFFFFF,&H00000000,&H00000000,&H80000000,-1,0,0,0,100,100,2,0,1,8,4,2,80,80,360,1
+Style: EmojiStyle,Segoe UI Emoji,64,&H00FFFFFF,&H00000000,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,2,80,80,460,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     events = []
     chunk_size = 3
+
+    # Tag warna ASS (&HBBGGRR&)
     tag_yellow = "{\\c&H0000E6FF&}"
+    tag_neon_green = "{\\c&H0014FF39&}"
     tag_white = "{\\c&H00FFFFFF&}"
 
     i = 0
@@ -471,31 +649,55 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         st = chunk[0]["start"]
         en = chunk[-1]["end"]
 
-        if en < 1.30:
-            continue
-        if st < 1.30:
-            st = 1.30
-        if en - st < 0.4:
-            en = st + 0.4
+        if en - st < 0.35:
+            en = st + 0.35
 
         word_texts = [w["word"].strip().upper() for w in chunk if w["word"].strip()]
         if not word_texts:
             continue
 
-        if len(word_texts) == 1:
-            styled = f"{tag_yellow}{word_texts[0]}"
-        elif len(word_texts) == 2:
-            styled = f"{tag_yellow}{word_texts[0]} {tag_white}{word_texts[1]}"
-        else:
-            styled = f"{tag_yellow}{word_texts[0]} {tag_white}{' '.join(word_texts[1:])}"
+        # Format teks sesuai caption_style
+        if caption_style == "green_emoji":
+            # Gaya 2: Hijau Neon + Emoji
+            if len(word_texts) == 1:
+                styled = f"{tag_neon_green}{word_texts[0]}"
+            elif len(word_texts) == 2:
+                styled = f"{tag_neon_green}{word_texts[0]} {tag_white}{word_texts[1]}"
+            else:
+                styled = f"{tag_neon_green}{word_texts[0]} {tag_white}{' '.join(word_texts[1:])}"
 
-        events.append(f"Dialogue: 0,{format_ass_time(st)},{format_ass_time(en)},SubtitleStyle,,0,0,360,,{styled}")
+            # Cek apakah ada kata yang cocok untuk emoji kontekstual
+            found_emoji = None
+            for w in word_texts:
+                clean_w = "".join(c for c in w if c.isalnum())
+                if clean_w in EMOJI_KEYWORD_MAP:
+                    found_emoji = EMOJI_KEYWORD_MAP[clean_w]
+                    break
+
+            if found_emoji:
+                events.append(f"Dialogue: 0,{format_ass_time(st)},{format_ass_time(en)},EmojiStyle,,0,0,460,,{found_emoji}")
+            events.append(f"Dialogue: 1,{format_ass_time(st)},{format_ass_time(en)},SubtitleStyle,,0,0,360,,{styled}")
+
+        elif caption_style == "monochrome":
+            # Gaya 3: Hitam Putih Elegan Minimalis
+            styled = f"{tag_white}{' '.join(word_texts)}"
+            events.append(f"Dialogue: 0,{format_ass_time(st)},{format_ass_time(en)},SubtitleStyle,,0,0,360,,{styled}")
+
+        else:
+            # Gaya 1: Kuning Punch Z-Code (Default)
+            if len(word_texts) == 1:
+                styled = f"{tag_yellow}{word_texts[0]}"
+            elif len(word_texts) == 2:
+                styled = f"{tag_yellow}{word_texts[0]} {tag_white}{word_texts[1]}"
+            else:
+                styled = f"{tag_yellow}{word_texts[0]} {tag_white}{' '.join(word_texts[1:])}"
+            events.append(f"Dialogue: 0,{format_ass_time(st)},{format_ass_time(en)},SubtitleStyle,,0,0,360,,{styled}")
 
     with open(ass_path, "w", encoding="utf-8") as f:
         f.write(ass_header + "\n".join(events) + "\n")
-    print(f"✅ Subtitle ASS selesai disusun: {len(events)} events.")
+    print(f"✅ Subtitle ASS selesai disusun (Gaya: {caption_style}): {len(events)} events.")
 
-def generate_youtube_description_and_hashtags(title: str, source_channel: str, words_json_path: str) -> str:
+def generate_youtube_description_and_hashtags(title: str, source_channel: str, words_json_path: str, source_url: str = "") -> str:
     """Membuat deskripsi YouTube Shorts & Hashtags otomatis dari transkrip suara video menggunakan AI (Groq Llama 3.3)"""
     transcript_text = ""
     if os.path.exists(words_json_path):
@@ -511,10 +713,14 @@ def generate_youtube_description_and_hashtags(title: str, source_channel: str, w
     clean_title = title.replace("\n", " ").strip()
     groq_key = get_groq_key()
 
+    source_line = f"📺 Source: {source_channel}"
+    if source_url:
+        source_line += f"\n🔗 Link Asli: {source_url}"
+
     fallback_desc = (
         f"{clean_title}\n\n"
         f"Simak renungan dan pembahasan lengkapnya dalam video singkat ini. Semoga bermanfaat dan menjadi pengingat kebaikan untuk kita semua.\n\n"
-        f"📺 Source: {source_channel}\n\n"
+        f"{source_line}\n\n"
         f"#shorts #dakwah #islamicshorts #renunganislam #motivasiislam #hijrah #selfreminder #{source_channel.lower().replace(' ', '')}"
     )
 
@@ -526,11 +732,13 @@ def generate_youtube_description_and_hashtags(title: str, source_channel: str, w
         f"Buatkan Deskripsi YouTube Shorts yang menarik, menyentuh hati, dan SEO-friendly beserta Hashtag viral berdasarkan data video berikut:\n"
         f"- Judul Video: {clean_title}\n"
         f"- Source Channel: {source_channel}\n"
+        f"- Source URL: {source_url}\n"
         f"- Transkrip Suara Video: \"{transcript_text[:2500]}\"\n\n"
         f"ATURAN OUTPUT (WAJIB DIIKUTI):\n"
         f"1. Langsung berikan teks siap copy-paste untuk kolom Deskripsi YouTube (tanpa kata pengantar seperti 'Berikut adalah deskripsinya:').\n"
         f"2. Paragraf 1: Kalimat hook kuat & ringkasan inti pesan dari transkrip suara di atas (2-3 kalimat).\n"
-        f"3. Paragraf 2: Ajakan interaktif singkat (misal tulis pendapat di kolom komentar / bagikan kebaikan ini) & kredit '📺 Source: {source_channel}'.\n"
+        f"3. Paragraf 2: Ajakan interaktif singkat (misal tulis pendapat di kolom komentar / bagikan kebaikan ini) & kredit:\n"
+        f"{source_line}\n"
         f"4. Baris terakhir: 10-15 hashtag relevan dengan huruf kecil semua (wajib ada #shorts #fyp #dakwah #islamicshorts ditambah hashtag tokoh/topik spesifik dari isi transkrip)."
     )
 
@@ -565,71 +773,109 @@ def generate_youtube_description_and_hashtags(title: str, source_channel: str, w
 
     return fallback_desc
 
-def render_and_upload(raw_video: str, title: str, source_channel: str, queue_id: str = ""):
-    # Buat identifier unik berdasarkan video input saat ini
+def render_and_upload(raw_video: str, title: str, source_channel: str, queue_id: str = "", caption_style: str = "yellow", source_url: str = ""):
     file_stat = os.stat(raw_video)
     job_id = f"{int(time.time())}_{file_stat.st_size}"
 
     cover_img = os.path.join(WORK_DIR, f"cover_{job_id}.jpg")
+    hook_mp3 = os.path.join(WORK_DIR, f"hook_{job_id}.mp3")
+    cover_segment_mp4 = os.path.join(WORK_DIR, f"cover_seg_{job_id}.mp4")
+    main_segment_mp4 = os.path.join(WORK_DIR, f"main_seg_{job_id}.mp4")
     badge_img = os.path.join(WORK_DIR, "modern_glass_yt_badge.png")
+    channel_badge_img = os.path.join(WORK_DIR, "channel_watermark.png")
     words_json = os.path.join(WORK_DIR, f"transcript_{job_id}.json")
     ass_path = os.path.join(WORK_DIR, f"subtitles_{job_id}.ass")
     output_mp4 = os.path.join(WORK_DIR, f"final_short_{job_id}.mp4")
 
-    # 1. Bangun Watermark Glassmorphism & Split Cover Asli (2 Orang Berbeda)
-    update_queue_progress(queue_id, "Rendering (20%)", "🎨 [20%] Mengekstrak 2 pembicara (mata terbuka) & menyusun Cover Split-Screen + Glass Watermark...")
+    # 1. Bangun Watermark Glassmorphism & YouTube Channel Badge (Top-Left)
+    update_queue_progress(queue_id, "Rendering (15%)", "🎨 [15%] Menyiapkan Watermark Channel & Glass Source Badge...")
     generate_glass_badge(source_channel, badge_img)
-    generate_split_cover(raw_video, title, cover_img)
+    generate_channel_watermark(channel_badge_img)
 
-    # 3. Transkripsi Audio BARU dari Video Ini
-    update_queue_progress(queue_id, "Rendering (45%)", "🎙️ [45%] Mengekstrak MP3 & mentranskrip suara per kata via Groq Whisper AI...")
+    # 2. Ekstrak 2 Pembicara Berbeda & Gambar Cover Statis
+    update_queue_progress(queue_id, "Rendering (25%)", "📸 [25%] Mengekstrak 2 pembicara berbeda & emoji cover...")
+    top_half, bot_half = generate_split_cover(raw_video, title, cover_img)
+
+    # 3. AI Voice-Over Hook dari Judul Cover & Animated Motion Cover Segment
+    update_queue_progress(queue_id, "Rendering (35%)", "🎙️ [35%] Memproduksi AI Voice-Over Hook & Animasi Motion Cover...")
+    dur_hook = generate_ai_voice_hook(title, hook_mp3)
+    generate_animated_cover_segment(top_half, bot_half, title, hook_mp3, dur_hook, cover_segment_mp4)
+
+    # 4. Transkripsi Audio BARU dari Video Ini via Whisper
+    update_queue_progress(queue_id, "Rendering (50%)", "🎙️ [50%] Mentranskrip suara video asli per kata via Groq Whisper AI...")
     transcribe_with_whisper(raw_video, words_json)
 
-    # 4. Bangun Subtitle ASS dari Transkrip Baru
-    update_queue_progress(queue_id, "Rendering (65%)", "📝 [65%] Menyusun Subtitle ASS sinkron suara & merender video Portrait 9:16 HD 4K...")
-    build_subtitles(words_json, ass_path)
+    # 5. Bangun Subtitle ASS sesuai gaya yang dipilih (Kuning / Hijau Emoji / Hitam Putih)
+    update_queue_progress(queue_id, "Rendering (65%)", f"📝 [65%] Menyusun Subtitle ASS (Gaya: {caption_style})...")
+    build_subtitles(words_json, ass_path, caption_style=caption_style)
 
-    # 5. Render FFmpeg
-    print("🎬 Merender Video Shorts Portrait 9:16...")
+    # 6. Render Segmen Utama Video Asli (Dimulai dari Detik 0 dengan Suara Asli & Watermark)
+    update_queue_progress(queue_id, "Rendering (75%)", "🎬 [75%] Merender Segmen Video Asli Portrait 9:16 HD 4K...")
+    print("🎬 Merender Segmen Utama Video Asli...")
     escaped_ass = ass_path.replace("\\", "/").replace(":", "\\:")
 
-    filter_complex = (
+    main_filter = (
         "[0:v]crop=606:1078:650:0,scale=1080:1920:flags=lanczos[vmain];"
-        "[1:v]scale=1080:1920[vcover];"
-        "[vmain][vcover]overlay=0:0:enable='between(t,0,1.30)'[vwithcover];"
-        f"[vwithcover][2:v]overlay=360:1730:enable='gte(t,1.30)'[vwithbadge];"
+        "[vmain][1:v]overlay=45:55[vwithchannel];"
+        f"[vwithchannel][2:v]overlay=360:1730[vwithbadge];"
         f"[vwithbadge]subtitles=filename='{escaped_ass}'[vwithsub];"
         "[vwithsub]unsharp=5:5:1.1:5:5:0.0,eq=contrast=1.12:brightness=0.01:saturation=1.18[vout]"
     )
 
-    cmd = [
+    cmd_main = [
         "ffmpeg", "-y",
-        "-threads", "0",
         "-i", raw_video,
-        "-loop", "1", "-t", "1.30", "-i", cover_img,
+        "-i", channel_badge_img,
         "-i", badge_img,
-        "-filter_complex", filter_complex,
+        "-filter_complex", main_filter,
         "-map", "[vout]",
         "-map", "0:a",
         "-af", "volume=1.35,highpass=f=80,lowpass=f=12000",
         "-c:v", "libx264",
+        "-preset", "ultrafast",
+        "-crf", "28",
+        "-c:a", "aac",
+        "-b:a", "128k",
+        "-ar", "44100",
+        "-ac", "2",
+        "-pix_fmt", "yuv420p",
+        main_segment_mp4
+    ]
+    subprocess.run(cmd_main, check=True)
+
+    # 7. Gabungkan: Cover Animasi (dengan AI Hook Voice) + Segmen Video Asli (dengan Suara Aslinya)
+    update_queue_progress(queue_id, "Rendering (85%)", "🔗 [85%] Menggabungkan Cover Hook AI + Video Asli...")
+    print("🔗 Menggabungkan Intro Cover Hook AI + Video Asli...")
+    cmd_concat = [
+        "ffmpeg", "-y",
+        "-i", cover_segment_mp4,
+        "-i", main_segment_mp4,
+        "-filter_complex", (
+            "[0:v]scale=1080:1920,setsar=1[v0];"
+            "[1:v]scale=1080:1920,setsar=1[v1];"
+            "[0:a]aformat=sample_rates=44100:channel_layouts=stereo[a0];"
+            "[1:a]aformat=sample_rates=44100:channel_layouts=stereo[a1];"
+            "[v0][a0][v1][a1]concat=n=2:v=1:a=1[vcat][acat]"
+        ),
+        "-map", "[vcat]",
+        "-map", "[acat]",
+        "-c:v", "libx264",
         "-preset", "veryfast",
-        "-crf", "32",
+        "-crf", "30",
         "-c:a", "aac",
         "-b:a", "128k",
         "-pix_fmt", "yuv420p",
         output_mp4
     ]
-
-    subprocess.run(cmd, check=True)
+    subprocess.run(cmd_concat, check=True)
     size_mb = os.path.getsize(output_mp4) / (1024 * 1024)
     print(f"🎉 RENDER SUKSES! File: {output_mp4} ({size_mb:.2f} MB)")
 
-    # 6. Buat Deskripsi & Hashtag YouTube Otomatis dari Transkrip
-    update_queue_progress(queue_id, "Rendering (85%)", "🤖 [85%] Membuat Deskripsi YouTube + Hashtag otomatis dari transkrip via Groq AI...")
-    yt_desc_hashtags = generate_youtube_description_and_hashtags(title, source_channel, words_json)
+    # 8. Buat Deskripsi & Hashtag YouTube Otomatis (Termasuk Link Sumber)
+    update_queue_progress(queue_id, "Rendering (90%)", "🤖 [90%] Menyusun Deskripsi & Hashtag AI...")
+    yt_desc_hashtags = generate_youtube_description_and_hashtags(title, source_channel, words_json, source_url=source_url)
 
-    # 7. Kirim Video + Deskripsi & Hashtag ke Telegram
+    # 9. Kirim Video + Deskripsi & Hashtag ke Telegram
     update_queue_progress(queue_id, "Sending_Telegram (95%)", "📤 [95%] Mengirim Video + Deskripsi & Hashtag ke Bot Telegram...")
     print("📤 Mengirim Video & Deskripsi YouTube ke Telegram Bot...")
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendVideo"
@@ -637,10 +883,12 @@ def render_and_upload(raw_video: str, title: str, source_channel: str, queue_id:
     caption_header = (
         f"🎬 HASIL VIDEO YOUTUBE SHORTS (Z-CODE)\n"
         f"📌 Judul: {clean_title}\n"
-        f"📺 Source: {source_channel}\n\n"
-        f"📝 DESKRIPSI & HASHTAG SIAP POST:\n"
-        f"────────────────────\n"
+        f"🎨 Gaya Caption: {caption_style.upper()}\n"
+        f"📺 Source: {source_channel}\n"
     )
+    if source_url:
+        caption_header += f"🔗 Link: {source_url}\n"
+    caption_header += "\n📝 DESKRIPSI & HASHTAG SIAP POST:\n────────────────────\n"
     caption = (caption_header + yt_desc_hashtags)[:1020]
 
     cmd_curl = [
@@ -654,7 +902,6 @@ def render_and_upload(raw_video: str, title: str, source_channel: str, queue_id:
         res = subprocess.run(cmd_curl, capture_output=True, text=True)
         print("Telegram response:", res.stdout[:200])
 
-        # Kirim juga pesan teks terpisah berisi murni Deskripsi + Hashtag agar mudah di-copy 1x klik di Telegram
         try:
             requests.post(
                 f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
@@ -686,9 +933,12 @@ def render_and_upload(raw_video: str, title: str, source_channel: str, queue_id:
                 telegram_url=tg_link
             )
 
-            print("🧹 Membersihkan file aset & hasil render sementara agar penyimpanan laptop tetap lega...")
-            cleanup_targets = [cover_img, badge_img, words_json, ass_path, output_mp4]
-            # Hapus juga salinan input_video.mp4 di dalam render_workspace (bukan file asli di folder luar)
+            # 10. Hapus File Sementara untuk Menjaga Laptop Tetap Lega
+            print("🧹 Membersihkan file aset sementara agar penyimpanan laptop tetap lega...")
+            cleanup_targets = [
+                cover_img, hook_mp3, cover_segment_mp4, main_segment_mp4,
+                badge_img, channel_badge_img, words_json, ass_path, output_mp4
+            ]
             if os.path.abspath(raw_video).startswith(os.path.abspath(WORK_DIR)):
                 cleanup_targets.append(raw_video)
             for target_file in cleanup_targets:
@@ -708,16 +958,16 @@ def main():
     parser.add_argument("--title", default="TIDAK ADA TAKDIR YANG SALAH\nEKSPEKTASI KITA YANG SALAH")
     parser.add_argument("--source", default="YNTV")
     parser.add_argument("--queue-id", default="")
+    parser.add_argument("--caption-style", default="yellow", choices=["yellow", "green_emoji", "monochrome"])
+    parser.add_argument("--source-url", default="")
     args = parser.parse_args()
 
     input_vid = args.input
     if not input_vid or not os.path.exists(input_vid):
-        # 1. Fallback input_video.mp4
         candidate = os.path.join(WORK_DIR, "input_video.mp4")
         if os.path.exists(candidate):
             input_vid = candidate
         else:
-            # 2. Otomatis deteksi rekaman layar TERBARU yang ada di folder Screen Recordings
             import glob
             rec_files = glob.glob(r"C:\Users\draconik\Videos\Screen Recordings\*.mp4")
             if rec_files:
@@ -729,8 +979,17 @@ def main():
     print(f"▶️ Memulai proses dengan video: {input_vid}")
     print(f"🏷️ Title Cover: {args.title}")
     print(f"📺 Source Watermark: {args.source}")
+    print(f"🎨 Caption Style: {args.caption_style}")
+    print(f"🔗 Source URL: {args.source_url}")
 
-    render_and_upload(input_vid, args.title, args.source, args.queue_id)
+    render_and_upload(
+        input_vid,
+        args.title,
+        args.source,
+        args.queue_id,
+        caption_style=args.caption_style,
+        source_url=args.source_url
+    )
 
 if __name__ == "__main__":
     main()

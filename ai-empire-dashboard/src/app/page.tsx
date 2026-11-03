@@ -53,6 +53,10 @@ export default function AIEmpireDashboard() {
     "Ternyata Ustad Felix Bisa Sombong, Tapi Sombong Nya Kek Gini"
   );
   const [islamicSourceYt, setIslamicSourceYt] = useState("YNTV");
+  const [islamicSourceUrl, setIslamicSourceUrl] = useState("");
+  const [islamicCaptionStyle, setIslamicCaptionStyle] = useState<
+    "yellow" | "green_emoji" | "monochrome"
+  >("yellow");
   const [islamicVideoFile, setIslamicVideoFile] = useState<File | null>(null);
   const [isProcessingIslamic, setIsProcessingIslamic] = useState(false);
   const [optSmartCrop, setOptSmartCrop] = useState(true);
@@ -128,6 +132,8 @@ export default function AIEmpireDashboard() {
       formData.append("file", islamicVideoFile);
       formData.append("title", islamicTitle);
       formData.append("source", islamicSourceYt || "YNTV");
+      formData.append("caption_style", islamicCaptionStyle);
+      formData.append("source_url", islamicSourceUrl.trim());
 
       const res = await fetch("/api/shorts/upload", {
         method: "POST",
@@ -477,6 +483,113 @@ export default function AIEmpireDashboard() {
                     </p>
                   </div>
 
+                  {/* Source YouTube URL Input */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2 flex items-center justify-between">
+                      <span>Link Sumber YouTube (URL Video Asli)</span>
+                      <span className="text-[10px] text-amber-400 font-semibold lowercase">*masuk otomatis ke deskripsi</span>
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <div className="bg-red-600/20 border border-red-500/30 text-red-400 font-bold text-xs px-3 py-3 rounded-xl flex items-center gap-1.5 shrink-0">
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        <span>Link YT</span>
+                      </div>
+                      <input
+                        type="url"
+                        value={islamicSourceUrl}
+                        onChange={(e) => setIslamicSourceUrl(e.target.value)}
+                        placeholder="Contoh: https://www.youtube.com/watch?v=xxxxxx"
+                        className="w-full bg-[#161c30] border border-slate-700/80 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1.5">
+                      *Otomatis digabung di deskripsi YouTube & Telegram: <code>📺 Source: {islamicSourceYt || "YNTV"}</code> & <code>🔗 Link Asli: {islamicSourceUrl || "..."}</code>
+                    </p>
+                  </div>
+
+                  {/* 3 Caption Styles Selector */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2.5">
+                      Pilih Tema & Gaya Caption Teks (Subtitle):
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {/* Option 1: Kuning Punch */}
+                      <button
+                        type="button"
+                        onClick={() => setIslamicCaptionStyle("yellow")}
+                        className={`p-3.5 rounded-xl border text-left transition-all relative ${
+                          islamicCaptionStyle === "yellow"
+                            ? "bg-amber-500/15 border-amber-400 ring-2 ring-amber-400/30 shadow-lg shadow-amber-500/10"
+                            : "bg-[#14192b] border-slate-800 hover:border-slate-700"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-xs font-black text-amber-400">🟡 Kuning Punch</span>
+                          {islamicCaptionStyle === "yellow" && (
+                            <CheckCircle2 className="w-4 h-4 text-amber-400" />
+                          )}
+                        </div>
+                        <div className="text-[10px] text-slate-400 leading-tight">
+                          Gaya Z-Code Classic: Kata aktif kuning tebal & stroke hitam tegas.
+                        </div>
+                        <div className="mt-2.5 pt-2 border-t border-slate-800/80 text-center font-black text-xs">
+                          <span className="text-[#FFE600]">SAAT</span>{" "}
+                          <span className="text-white">ALLAH MARAH</span>
+                        </div>
+                      </button>
+
+                      {/* Option 2: Hijau Neon + Emoji */}
+                      <button
+                        type="button"
+                        onClick={() => setIslamicCaptionStyle("green_emoji")}
+                        className={`p-3.5 rounded-xl border text-left transition-all relative ${
+                          islamicCaptionStyle === "green_emoji"
+                            ? "bg-emerald-500/15 border-emerald-400 ring-2 ring-emerald-400/30 shadow-lg shadow-emerald-500/10"
+                            : "bg-[#14192b] border-slate-800 hover:border-slate-700"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-xs font-black text-emerald-400">🟢 Hijau + Emoji</span>
+                          {islamicCaptionStyle === "green_emoji" && (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          )}
+                        </div>
+                        <div className="text-[10px] text-slate-400 leading-tight">
+                          Hijau neon viral + emoji kontekstual otomatis di atas kata penting.
+                        </div>
+                        <div className="mt-2.5 pt-2 border-t border-slate-800/80 text-center font-black text-xs">
+                          <div className="text-[12px] leading-none mb-0.5">🏙️</div>
+                          <span className="text-[#14FF39]">JAKARTA</span>{" "}
+                          <span className="text-white">ITU BANYAK</span>
+                        </div>
+                      </button>
+
+                      {/* Option 3: Monochrome Hitam Putih */}
+                      <button
+                        type="button"
+                        onClick={() => setIslamicCaptionStyle("monochrome")}
+                        className={`p-3.5 rounded-xl border text-left transition-all relative ${
+                          islamicCaptionStyle === "monochrome"
+                            ? "bg-slate-700/30 border-slate-300 ring-2 ring-slate-300/30 shadow-lg shadow-slate-500/10"
+                            : "bg-[#14192b] border-slate-800 hover:border-slate-700"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-xs font-black text-slate-200">⚪ Hitam Putih</span>
+                          {islamicCaptionStyle === "monochrome" && (
+                            <CheckCircle2 className="w-4 h-4 text-slate-200" />
+                          )}
+                        </div>
+                        <div className="text-[10px] text-slate-400 leading-tight">
+                          Monochrome clean: Full putih bersih bergaris hitam solid, super rapi.
+                        </div>
+                        <div className="mt-2.5 pt-2 border-t border-slate-800/80 text-center font-black text-xs">
+                          <span className="text-white">JAKARTA ITU BANYAK</span>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+
                   {/* Checkbox Options ala Z-Code */}
                   <div className="bg-[#14192b] border border-slate-800 rounded-xl p-4 space-y-3">
                     <div className="text-xs font-bold text-slate-300 uppercase tracking-wider">
@@ -498,7 +611,7 @@ export default function AIEmpireDashboard() {
                         onChange={(e) => setOptBoldSubtitle(e.target.checked)}
                         className="w-4 h-4 accent-amber-500 rounded"
                       />
-                      <span>Subtitle Bold Kuning/Merah/Putih dengan Outline Hitam</span>
+                      <span>Subtitle Bold Sesuai Tema Pilihan di Atas</span>
                     </label>
                     <label className="flex items-center gap-3 text-xs text-slate-300 cursor-pointer">
                       <input
@@ -549,8 +662,24 @@ export default function AIEmpireDashboard() {
                   {/* Mockup Video Image / Podcaster */}
                   <div className="absolute inset-0 bg-cover bg-center opacity-60 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-amber-900/40 via-slate-900 to-black"></div>
 
-                  {/* Top Yellow Cover Box Title Preview */}
-                  <div className="relative z-10 mt-6 px-2">
+                  {/* Top Left Channel Watermark (Quran + short-islamic) */}
+                  <div className="absolute top-4 left-4 z-20 flex flex-col items-center gap-1">
+                    <div className="w-7 h-7 rounded-full bg-amber-500/30 border border-amber-400/60 flex items-center justify-center shadow-md overflow-hidden bg-black">
+                      <span className="text-[12px]">📖</span>
+                    </div>
+                    <span className="text-[9px] font-bold text-white/90 bg-black/70 px-1.5 py-0.5 rounded-full border border-white/10 leading-none">
+                      short-islamic
+                    </span>
+                  </div>
+
+                  {/* Top Yellow Cover Box Title Preview + Floating Emojis */}
+                  <div className="relative z-10 mt-10 px-2">
+                    {/* Floating Emojis Outside Card */}
+                    <div className="flex justify-end mb-1">
+                      <span className="bg-black/80 border border-amber-400/60 px-2 py-0.5 rounded-full text-[10px] shadow-lg">
+                        😱 💔 ⚠️
+                      </span>
+                    </div>
                     <div className="bg-[#FFE600] text-black font-black text-xs px-3 py-2 rounded-xl text-center leading-tight shadow-lg border-2 border-white uppercase tracking-tight">
                       {islamicTitle || "TITLE BOX KUNING DI SINI"}
                     </div>
@@ -558,22 +687,42 @@ export default function AIEmpireDashboard() {
 
                   {/* Center Speaker Simulation */}
                   <div className="relative z-10 text-center my-auto">
-                    <div className="w-20 h-20 rounded-full bg-slate-800 border-2 border-amber-400/50 mx-auto flex items-center justify-center shadow-lg">
-                      <Play className="w-8 h-8 text-amber-400 fill-amber-400" />
+                    <div className="w-16 h-16 rounded-full bg-slate-800 border-2 border-amber-400/50 mx-auto flex items-center justify-center shadow-lg">
+                      <Play className="w-6 h-6 text-amber-400 fill-amber-400" />
                     </div>
                   </div>
 
                   {/* Bottom Subtitle & Source Watermark */}
                   <div className="relative z-10 mb-4 text-center space-y-2">
-                    {/* Bold Subtitle (Kuning & Merah) */}
-                    <div className="text-center font-black tracking-wider drop-shadow-[0_4px_8px_rgba(0,0,0,1)]">
-                      <span className="text-[#FFE600] text-lg block stroke-black">
-                        SEANDAINYA
-                      </span>
-                      <span className="text-white text-base block font-black">
-                        KARENA AKU
-                      </span>
-                    </div>
+                    {/* Dynamic Subtitle Preview based on islamicCaptionStyle */}
+                    {islamicCaptionStyle === "green_emoji" && (
+                      <div className="text-center font-black tracking-wider drop-shadow-[0_4px_8px_rgba(0,0,0,1)]">
+                        <div className="text-sm leading-none mb-0.5">🏙️</div>
+                        <span className="text-[#14FF39] text-base block font-black">
+                          JAKARTA
+                        </span>
+                        <span className="text-white text-sm block font-black">
+                          ITU BANYAK
+                        </span>
+                      </div>
+                    )}
+                    {islamicCaptionStyle === "monochrome" && (
+                      <div className="text-center font-black tracking-wider drop-shadow-[0_4px_8px_rgba(0,0,0,1)]">
+                        <span className="text-white text-base block font-black">
+                          JAKARTA ITU BANYAK
+                        </span>
+                      </div>
+                    )}
+                    {islamicCaptionStyle === "yellow" && (
+                      <div className="text-center font-black tracking-wider drop-shadow-[0_4px_8px_rgba(0,0,0,1)]">
+                        <span className="text-[#FFE600] text-lg block stroke-black">
+                          SEANDAINYA
+                        </span>
+                        <span className="text-white text-base block font-black">
+                          KARENA AKU
+                        </span>
+                      </div>
+                    )}
 
                     {/* YouTube Source Badge Under Subtitle */}
                     <div className="inline-flex items-center gap-1.5 bg-black/80 backdrop-blur-md px-3 py-1 rounded-full border border-white/20">

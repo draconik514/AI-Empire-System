@@ -12,6 +12,8 @@ export async function POST(req: NextRequest) {
     const file = formData.get("file") as File | null;
     const title = (formData.get("title") as string) || "TIDAK ADA TAKDIR YANG SALAH";
     const sourceChannel = (formData.get("source") as string) || "YNTV";
+    const captionStyle = (formData.get("caption_style") as string) || "yellow";
+    const sourceUrl = (formData.get("source_url") as string) || "";
 
     if (!file) {
       return NextResponse.json({ ok: false, error: "Tidak ada file video yang dikirim" }, { status: 400 });
@@ -39,9 +41,9 @@ export async function POST(req: NextRequest) {
         title: title,
         hook_text: "⏳ [10%] Video diterima di Localhost, menyiapkan pipeline Z-Code...",
         full_script: "",
-        reference_video_url: "https://www.youtube.com/@islamic-short-513",
-        style_preset: `Islamic Z-Code Style (Portrait 9:16 Crop, Subtitle Kuning/Merah, Watermark [YT] ${sourceChannel}, Filter HD 4K)`,
-        sfx_and_motion_notes: "Cover Split-Screen 2 Pembicara, Auto Deskripsi + Hashtag AI",
+        reference_video_url: sourceUrl || "https://www.youtube.com/@islamic-short-513",
+        style_preset: `Islamic Z-Code Style (Gaya: ${captionStyle}, Watermark [YT] ${sourceChannel}, Filter HD 4K)`,
+        sfx_and_motion_notes: `Cover Split-Screen 2 Pembicara + Hook AI VO, Caption: ${captionStyle}`,
         engine_used: "Z-Code Local Pipeline + Groq Whisper + FFmpeg",
         status: "Rendering (10%)",
         revision_version: 1,
@@ -63,7 +65,7 @@ export async function POST(req: NextRequest) {
     // Jalankan pipeline editing Z-Code secara asynchronous di laptop
     const pythonScript = path.join(bridgeDir, "build_zcode_perfect_pipeline.py");
     const queueIdArg = queueItem?.id ? ` --queue-id "${queueItem.id}"` : "";
-    const cmd = `python "${pythonScript}" --input "${inputVideoPath}" --title "${title.replace(/"/g, '\\"')}" --source "${sourceChannel}"${queueIdArg}`;
+    const cmd = `python "${pythonScript}" --input "${inputVideoPath}" --title "${title.replace(/"/g, '\\"')}" --source "${sourceChannel}" --caption-style "${captionStyle}" --source-url "${sourceUrl.replace(/"/g, '\\"')}"${queueIdArg}`;
 
     console.log(`[Z-Code Trigger] Menjalankan: ${cmd}`);
     exec(cmd, { cwd: bridgeDir }, (err, stdout, stderr) => {
