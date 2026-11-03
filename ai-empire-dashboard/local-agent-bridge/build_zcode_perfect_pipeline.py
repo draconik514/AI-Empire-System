@@ -416,11 +416,11 @@ def generate_split_cover(raw_video: str, title: str, out_cover: str):
 
     card_layer = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
     c_draw = ImageDraw.Draw(card_layer)
-    # 1. Paruh Atas: Hitam Glassmorphism Semi-Transparan
-    c_draw.rounded_rectangle([card_x, card_y, card_x + card_w, y_mid], radius=radius, corners=(True, True, False, False), fill=(18, 20, 24, 235))
-    c_draw.rounded_rectangle([card_x + 4, card_y + 3, card_x + card_w - 4, card_y + 35], radius=radius - 4, corners=(True, True, False, False), fill=(255, 255, 255, 35))
+    # 1. Paruh Atas: Hitam Glassmorphism Transparan (Tembus pandang melihat latar belakang video)
+    c_draw.rounded_rectangle([card_x, card_y, card_x + card_w, y_mid], radius=radius, corners=(True, True, False, False), fill=(10, 12, 16, 145))
+    c_draw.rounded_rectangle([card_x + 4, card_y + 3, card_x + card_w - 4, card_y + 32], radius=radius - 4, corners=(True, True, False, False), fill=(255, 255, 255, 30))
     # 2. Paruh Bawah: Kuning Terang Solid
-    c_draw.rounded_rectangle([card_x, y_mid, card_x + card_w, card_y + card_h], radius=radius, corners=(False, False, True, True), fill=(255, 225, 0, 255))
+    c_draw.rounded_rectangle([card_x, y_mid, card_x + card_w, card_y + card_h], radius=radius, corners=(False, False, True, True), fill=(255, 222, 0, 255))
     # 3. Garis Tepi & Pemisah Hitam Pekat
     c_draw.rounded_rectangle([card_x, card_y, card_x + card_w, card_y + card_h], radius=radius, outline=(0, 0, 0, 255), width=5)
     c_draw.line([(card_x, y_mid), (card_x + card_w, y_mid)], fill=(0, 0, 0, 255), width=5)
@@ -510,14 +510,14 @@ def generate_animated_cover_segment(top_half, bot_half, title: str, hook_audio_p
     s_layer = s_layer.filter(ImageFilter.GaussianBlur(16))
     card_asset.paste(s_layer, (0, 0), s_layer)
 
-    # Black Glass + Yellow Card Body (Sesuai Referensi Dua Warna)
+    # Black Transparent Glass + Yellow Card Body (Tembus pandang melihat latar belakang video)
     c_draw = ImageDraw.Draw(card_asset)
     y_mid_asset = margin + card_h // 2
-    # 1. Paruh Atas: Hitam Glassmorphism Semi-Transparan
-    c_draw.rounded_rectangle([margin, margin, margin + card_w, y_mid_asset], radius=42, corners=(True, True, False, False), fill=(18, 20, 24, 235))
-    c_draw.rounded_rectangle([margin + 4, margin + 3, margin + card_w - 4, margin + 35], radius=38, corners=(True, True, False, False), fill=(255, 255, 255, 35))
+    # 1. Paruh Atas: Hitam Glassmorphism Transparan (Tembus pandang melihat latar belakang video)
+    c_draw.rounded_rectangle([margin, margin, margin + card_w, y_mid_asset], radius=42, corners=(True, True, False, False), fill=(10, 12, 16, 145))
+    c_draw.rounded_rectangle([margin + 4, margin + 3, margin + card_w - 4, margin + 32], radius=38, corners=(True, True, False, False), fill=(255, 255, 255, 30))
     # 2. Paruh Bawah: Kuning Terang Solid
-    c_draw.rounded_rectangle([margin, y_mid_asset, margin + card_w, margin + card_h], radius=42, corners=(False, False, True, True), fill=(255, 225, 0, 255))
+    c_draw.rounded_rectangle([margin, y_mid_asset, margin + card_w, margin + card_h], radius=42, corners=(False, False, True, True), fill=(255, 222, 0, 255))
     # 3. Garis Tepi & Pemisah Hitam Pekat
     c_draw.rounded_rectangle([margin, margin, margin + card_w, margin + card_h], radius=42, outline=(0, 0, 0, 255), width=5)
     c_draw.line([(margin, y_mid_asset), (margin + card_w, y_mid_asset)], fill=(0, 0, 0, 255), width=5)
