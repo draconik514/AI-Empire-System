@@ -163,69 +163,80 @@ def generate_channel_watermark(out_path: str):
     print(f"✅ Watermark YouTube Channel disimpan: {out_path}")
 
 def generate_glass_badge(source_channel: str, out_path: str):
-    """Menghasilkan watermark badge YouTube Kapsul Hitam (Pill Shape) sesuai referensi resmi (media_1793689636013_ef8f29cd.png)"""
-    text = source_channel.upper()
-    try:
-        font = ImageFont.truetype("impact.ttf", 38)
-    except:
-        font = ImageFont.truetype("arialbd.ttf", 36)
+    """Menghasilkan watermark badge YouTube Kapsul Hitam (Pill Shape) presisi tinggi sesuai referensi resmi (media_1793689636013_ef8f29cd.png)"""
+    text = source_channel.strip().upper()
+    
+    # 4x supersampling untuk render ikon & kurva kapsul yang tajam dan mulus
+    scale = 4
+    pill_h = 56 * scale
+    radius = pill_h // 2
+    
+    font_size = int(32 * scale)
+    font_names = ["arialbd.ttf", "ariblk.ttf", "segoeuib.ttf", "calibrib.ttf"]
+    font = None
+    for fn in font_names:
+        try:
+            font = ImageFont.truetype(fn, font_size)
+            break
+        except:
+            continue
+    if font is None:
+        font = ImageFont.load_default()
 
     dummy_draw = ImageDraw.Draw(Image.new("RGBA", (10, 10)))
     bbox = dummy_draw.textbbox((0, 0), text, font=font)
     tw = bbox[2] - bbox[0]
     th = bbox[3] - bbox[1]
 
-    icon_diam = 42
-    padding_x = 22
-    spacing = 14
-    pill_h = 60
-    pill_w = padding_x + icon_diam + spacing + tw + padding_x
+    icon_diam = int(36 * scale)
+    pad_left = int(12 * scale)
+    spacing = int(14 * scale)
+    # Right padding minimal sama dengan radius agar teks tidak pernah menyentuh lengkungan kapsul
+    pad_right = int(24 * scale)
 
-    # 2x supersampling untuk render ikon & sudut kurva yang super halus dan tajam
-    scale = 2
-    W = pill_w * scale
-    H = pill_h * scale
-    pad_x = padding_x * scale
-    icon_d = icon_diam * scale
-    sp = spacing * scale
-    radius = H // 2
-
-    try:
-        font_hi = ImageFont.truetype("impact.ttf", 38 * scale)
-    except:
-        font_hi = ImageFont.truetype("arialbd.ttf", 36 * scale)
+    W = pad_left + icon_diam + spacing + tw + pad_right
+    H = pill_h
 
     img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    # Dark glass pill body (rounded rectangle)
-    draw.rounded_rectangle([2, 2, W - 2, H - 2], radius=radius, fill=(14, 16, 20, 235), outline=(255, 255, 255, 60), width=3)
+    # Dark background pill body (#0d0e12) dengan border tipis tajam (#373a46)
+    border_w = max(2, int(1.5 * scale))
+    draw.rounded_rectangle(
+        [border_w // 2, border_w // 2, W - border_w // 2 - 1, H - border_w // 2 - 1],
+        radius=radius,
+        fill=(13, 14, 18, 240),
+        outline=(55, 58, 70, 255),
+        width=border_w
+    )
 
     # Red YouTube circle
     cy = H // 2
-    cx = pad_x + icon_d // 2
-    r = icon_d // 2
-    draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(230, 25, 25, 255))
+    cx = pad_left + icon_diam // 2
+    r = icon_diam // 2
+    draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(235, 32, 32, 255))
 
-    # White play triangle
-    tri_s = int(13 * scale)
+    # White play triangle (segitiga sama sisi mengarah ke kanan tepat di tengah lingkaran merah)
+    tri_h = int(icon_diam * 0.44)
+    tri_w = int(tri_h * 0.88)
+    t_cx = cx + int(1.5 * scale)
     tri_pts = [
-        (cx - tri_s // 2 + 2 * scale, cy - tri_s),
-        (cx - tri_s // 2 + 2 * scale, cy + tri_s),
-        (cx + tri_s + 2 * scale, cy)
+        (t_cx - tri_w // 2, cy - tri_h // 2),
+        (t_cx - tri_w // 2, cy + tri_h // 2),
+        (t_cx + tri_w // 2, cy)
     ]
     draw.polygon(tri_pts, fill=(255, 255, 255, 255))
 
-    # Channel text
-    tx = cx + r + sp
-    t_bbox = draw.textbbox((0, 0), text, font=font_hi)
-    th_hi = t_bbox[3] - t_bbox[1]
-    ty = cy - th_hi // 2 - 3 * scale
-    draw.text((tx, ty), text, font=font_hi, fill=(255, 255, 255, 255))
+    # Channel text: teks putih bold yang sejajar sempurna secara vertikal
+    tx = pad_left + icon_diam + spacing
+    ty = cy - th // 2 - bbox[1] - int(1 * scale)
+    draw.text((tx, ty), text, font=font, fill=(255, 255, 255, 255))
 
-    badge = img.resize((pill_w, pill_h), Image.Resampling.LANCZOS)
+    target_w = W // scale
+    target_h = H // scale
+    badge = img.resize((target_w, target_h), Image.Resampling.LANCZOS)
     badge.save(out_path)
-    print(f"✅ Glassmorphism watermark disimpan: {out_path} ({pill_w}x{pill_h}px)")
+    print(f"✅ Watermark Glass Badge Kapsul disimpan: {out_path} ({target_w}x{target_h}px)")
 
 def generate_split_cover(raw_video: str, title: str, out_cover: str):
     """Mengekstrak 2 pembicara UTAMA yang BERBEDA untuk Split-Screen Cover 1080x1920 dengan emoji luar shape.
@@ -573,11 +584,12 @@ def generate_animated_cover_segment(top_half, bot_half, title: str, hook_audio_p
         "ffmpeg", "-y",
         "-i", temp_video,
         "-i", hook_audio_path,
-        "-c:v", "libx264", "-preset", "veryfast",
-        "-crf", "20", "-maxrate", "4000k", "-bufsize", "8000k",
+        "-c:v", "libx264", "-preset", "fast",
+        "-crf", "18", "-maxrate", "8500k", "-bufsize", "16000k",
         "-r", "30",
         "-c:a", "aac", "-b:a", "160k", "-ar", "44100", "-ac", "2",
         "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
         "-shortest",
         out_clip_path
     ]
@@ -802,6 +814,109 @@ def generate_youtube_description_and_hashtags(title: str, source_channel: str, w
 
     return fallback_desc
 
+def calculate_smart_crop_timeline(video_path: str, crop_w: int = 606, crop_h: int = 1078):
+    """Mendeteksi perpindahan kamera secara dinamis (Smart Auto-Reframe).
+    Saat ada 1 pembicara: kamera fokus ke pembicara itu.
+    Saat ada 2 orang dalam 1 scene: menganalisis pergerakan mulut (mouth variance) untuk fokus ke orang yang SEDANG BICARA.
+    Jika keduanya bicara atau hening: mempertahankan framing stabil tanpa memotong tubuh orang di tengah (seam).
+    Menghasilkan ekspresi FFmpeg crop dinamis x='if(lt(t,...),...)'."""
+    print("🎯 Menganalisis Smart Auto-Reframe (Pelacakan Pembicara Aktif & Antarmuka Multi-Kamera)...")
+    cap = cv2.VideoCapture(video_path)
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    duration = total_frames / fps
+    W = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 1920)
+    H = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 1080)
+
+    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+    default_x = max(0, min(W - crop_w, (W - crop_w) // 2))
+
+    # Pindai setiap 0.75 detik untuk mendeteksi siapa yang aktif berbicara
+    time_points = np.arange(0, duration, 0.75)
+    raw_positions = []
+    prev_active_cx = W // 2
+
+    for t in time_points:
+        cap.set(cv2.CAP_PROP_POS_MSEC, t * 1000)
+        ret1, f1 = cap.read()
+        ret2, f2 = cap.read()
+        if not (ret1 and ret2):
+            raw_positions.append((t, prev_active_cx))
+            continue
+
+        gray1 = cv2.cvtColor(f1, cv2.COLOR_BGR2GRAY)
+        gray2 = cv2.cvtColor(f2, cv2.COLOR_BGR2GRAY)
+
+        faces = face_cascade.detectMultiScale(gray1, 1.15, 4, minSize=(60, 60))
+        valid_faces = [f for f in faces if f[2] >= 75 and f[1] < H * 0.65]
+
+        if len(valid_faces) == 0:
+            raw_positions.append((t, prev_active_cx))
+        elif len(valid_faces) == 1:
+            cx = valid_faces[0][0] + valid_faces[0][2] // 2
+            prev_active_cx = cx
+            raw_positions.append((t, cx))
+        else:
+            # Multi-person / Two-shot: Analisis gerakan bibir (mouth motion)
+            best_face = None
+            max_motion = -1.0
+            for f in valid_faces:
+                fx, fy, fw, fh = f
+                my1 = fy + int(fh * 0.65)
+                my2 = fy + int(fh * 0.95)
+                mx1 = fx + int(fw * 0.25)
+                mx2 = fx + int(fw * 0.75)
+                m1 = gray1[my1:my2, mx1:mx2]
+                m2 = gray2[my1:my2, mx1:mx2]
+                if m1.size == 0 or m2.size == 0:
+                    continue
+                motion = float(np.mean(np.abs(m1.astype(float) - m2.astype(float))))
+                if motion > max_motion:
+                    max_motion = motion
+                    best_face = f
+
+            # Jika gerakan mulut > 1.8: orang ini sedang bicara -> ganti kamera ke dia
+            if best_face is not None and max_motion > 1.8:
+                cx = best_face[0] + best_face[2] // 2
+                prev_active_cx = cx
+                raw_positions.append((t, cx))
+            else:
+                # Jika hening dan prev masih default di tengah: fokuskan ke orang pertama agar tidak memotong di tengah
+                if prev_active_cx == W // 2 and valid_faces:
+                    prev_active_cx = valid_faces[0][0] + valid_faces[0][2] // 2
+                raw_positions.append((t, prev_active_cx))
+
+    cap.release()
+
+    if not raw_positions:
+        return str(default_x)
+
+    # Filter Stabilitas: Gabungkan perpindahan yang durasinya < 2.0s agar transisi kamera mulus layaknya editor podcast profesional
+    segments = []
+    current_x = max(0, min(W - crop_w, raw_positions[0][1] - crop_w // 2))
+    seg_start = 0.0
+
+    for i in range(1, len(raw_positions)):
+        t, cx = raw_positions[i]
+        target_x = max(0, min(W - crop_w, cx - crop_w // 2))
+
+        if abs(target_x - current_x) > 160 and (t - seg_start) >= 2.0:
+            segments.append((seg_start, t, current_x))
+            current_x = target_x
+            seg_start = t
+
+    segments.append((seg_start, duration, current_x))
+    print(f"🎬 Terdeteksi {len(segments)} segmen perpindahan fokus kamera cerdas:")
+    for s in segments:
+        print(f"   ⏱️ {s[0]:5.1f}s -> {s[1]:5.1f}s: X = {s[2]}")
+
+    # Susun ekspresi bertingkat FFmpeg: if(lt(t, t1), X1, if(lt(t, t2), X2, ...))
+    expr = str(segments[-1][2])
+    for s in reversed(segments[:-1]):
+        expr = f"if(lt(t,{s[1]:.2f}),{s[2]},{expr})"
+
+    return expr
+
 def render_and_upload(raw_video: str, title: str, source_channel: str, queue_id: str = "", caption_style: str = "yellow", source_url: str = ""):
     file_stat = os.stat(raw_video)
     job_id = f"{int(time.time())}_{file_stat.st_size}"
@@ -838,16 +953,19 @@ def render_and_upload(raw_video: str, title: str, source_channel: str, queue_id:
     update_queue_progress(queue_id, "Rendering (65%)", f"📝 [65%] Menyusun Subtitle ASS (Gaya: {caption_style})...")
     build_subtitles(words_json, ass_path, caption_style=caption_style)
 
-    # 6. Render Segmen Utama Video Asli (Dimulai dari Detik 0 dengan Suara Asli & Watermark)
-    update_queue_progress(queue_id, "Rendering (75%)", "🎬 [75%] Merender Segmen Video Asli Portrait 9:16 HD 4K...")
-    print("🎬 Merender Segmen Utama Video Asli...")
+    # 6. Analisis Pelacakan Kamera Cerdas (Smart Speaker Tracking) & Render Segmen Utama
+    update_queue_progress(queue_id, "Rendering (70%)", "🎯 [70%] Menghitung Pelacakan Kamera Cerdas (Smart Speaker Tracking)...")
+    crop_expr = calculate_smart_crop_timeline(raw_video, crop_w=606, crop_h=1078)
+
+    update_queue_progress(queue_id, "Rendering (75%)", "🎬 [75%] Merender Segmen Video Asli Portrait 9:16 Ultra HD...")
+    print("🎬 Merender Segmen Utama Video Asli dengan Pelacakan Kamera Cerdas...")
     escaped_ass = ass_path.replace("\\", "/").replace(":", "\\:")
 
     main_filter = (
-        "[0:v]crop=606:1078:650:0,scale=1080:1920:flags=bicubic[vmain];"
-        "[vmain]unsharp=5:5:0.7:5:5:0.0[vsharp];"
+        f"[0:v]crop=w=606:h=1078:x='{crop_expr}':y=0,scale=1080:1920:flags=lanczos[vmain];"
+        "[vmain]unsharp=5:5:0.8:5:5:0.0[vsharp];"
         "[vsharp][1:v]overlay=45:55[vwithchannel];"
-        f"[vwithchannel][2:v]overlay=(main_w-overlay_w)/2:1735[vwithbadge];"
+        f"[vwithchannel][2:v]overlay=(main_w-overlay_w)/2:1685[vwithbadge];"
         f"[vwithbadge]subtitles=filename='{escaped_ass}'[vwithsub];"
         "[vwithsub]eq=contrast=1.06:brightness=0.01:saturation=1.12[vout]"
     )
@@ -862,16 +980,17 @@ def render_and_upload(raw_video: str, title: str, source_channel: str, queue_id:
         "-map", "0:a",
         "-af", "volume=1.35,highpass=f=80,lowpass=f=12000",
         "-c:v", "libx264",
-        "-preset", "veryfast",
-        "-crf", "20",
-        "-maxrate", "4000k",
-        "-bufsize", "8000k",
+        "-preset", "fast",
+        "-crf", "18",
+        "-maxrate", "8500k",
+        "-bufsize", "16000k",
         "-r", "30",
         "-c:a", "aac",
         "-b:a", "160k",
         "-ar", "44100",
         "-ac", "2",
         "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
         main_segment_mp4
     ]
     subprocess.run(cmd_main, check=True)
@@ -890,6 +1009,7 @@ def render_and_upload(raw_video: str, title: str, source_channel: str, queue_id:
         "-safe", "0",
         "-i", concat_list,
         "-c", "copy",
+        "-movflags", "+faststart",
         output_mp4
     ]
     try:
@@ -910,31 +1030,47 @@ def render_and_upload(raw_video: str, title: str, source_channel: str, queue_id:
             "-map", "[vcat]",
             "-map", "[acat]",
             "-c:v", "libx264",
-            "-preset", "veryfast",
-            "-crf", "20",
+            "-preset", "fast",
+            "-crf", "18",
             "-c:a", "aac",
             "-b:a", "160k",
             "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart",
             output_mp4
         ]
         subprocess.run(cmd_concat_fallback, check=True)
     size_mb = os.path.getsize(output_mp4) / (1024 * 1024)
     print(f"🎉 RENDER SUKSES! File: {output_mp4} ({size_mb:.2f} MB)")
 
-    # Pastikan file < 48.5 MB untuk batas aman Telegram Bot API (50 MB)
-    if size_mb > 48.5:
-        print(f"⚠️ Ukuran file ({size_mb:.2f} MB) mendekati limit Telegram (50 MB). Mengoptimalkan ukuran...")
+    # Pastikan file < 25.0 MB untuk upload cepat, lancar tanpa timeout ke Telegram Bot API
+    if size_mb > 25.0:
+        print(f"⚠️ Ukuran file ({size_mb:.2f} MB) melebihi batas optimal upload cepat Telegram. Mengoptimalkan ukuran secara presisi...")
+        cap_meta = cv2.VideoCapture(output_mp4)
+        dur_s = cap_meta.get(cv2.CAP_PROP_FRAME_COUNT) / (cap_meta.get(cv2.CAP_PROP_FPS) or 30.0)
+        cap_meta.release()
+
+        # Target 23.0 MB total size agar upload super cepat & lancar
+        target_total_kbits = 23.0 * 8192
+        audio_kbits = 128 * dur_s
+        video_kbits = max(350 * dur_s, target_total_kbits - audio_kbits)
+        calc_bitrate_k = int(video_kbits / max(1.0, dur_s))
+        print(f"🎯 Menghitung bitrate optimal untuk durasi {dur_s:.1f}s: {calc_bitrate_k} kbps...")
+
         compressed_mp4 = output_mp4.replace(".mp4", "_compressed.mp4")
         cmd_comp = [
             "ffmpeg", "-y", "-i", output_mp4,
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-maxrate", "2800k", "-bufsize", "5600k",
-            "-c:a", "copy", compressed_mp4
+            "-c:v", "libx264", "-preset", "fast",
+            "-b:v", f"{calc_bitrate_k}k",
+            "-maxrate", f"{int(calc_bitrate_k * 1.2)}k",
+            "-bufsize", f"{calc_bitrate_k * 2}k",
+            "-c:a", "aac", "-b:a", "128k",
+            "-movflags", "+faststart", compressed_mp4
         ]
         subprocess.run(cmd_comp, check=True)
         if os.path.exists(compressed_mp4):
             os.replace(compressed_mp4, output_mp4)
             size_mb = os.path.getsize(output_mp4) / (1024 * 1024)
-            print(f"✅ Video berhasil dioptimalkan: {size_mb:.2f} MB (< 50 MB)")
+            print(f"✅ Video berhasil dioptimalkan presisi: {size_mb:.2f} MB (< 25 MB)")
 
     # 8. Buat Deskripsi & Hashtag YouTube Otomatis (Termasuk Link Sumber)
     update_queue_progress(queue_id, "Rendering (90%)", "🤖 [90%] Menyusun Deskripsi & Hashtag AI...")
@@ -964,7 +1100,8 @@ def render_and_upload(raw_video: str, title: str, source_channel: str, queue_id:
         "-X", "POST", url,
         "-F", f"chat_id={TELEGRAM_CHAT_ID}",
         "-F", f"video=@{output_mp4}",
-        "-F", f"caption={caption}"
+        "-F", f"caption={caption}",
+        "-F", "supports_streaming=true"
     ]
     try:
         res = subprocess.run(cmd_curl, capture_output=True, text=True)
