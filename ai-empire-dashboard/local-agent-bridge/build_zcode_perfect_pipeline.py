@@ -151,7 +151,8 @@ def generate_glass_badge(source_channel: str, out_path: str):
     print(f"✅ Glassmorphism watermark disimpan: {out_path}")
 
 def generate_split_cover(raw_video: str, title: str, out_cover: str):
-    """Mengekstrak 2 pembicara UTAMA yang berbeda dengan MATA TERBUKA & WAJAH UTUH untuk Split-Screen Cover 1080x1920"""
+    """Mengekstrak 2 pembicara UTAMA yang BERBEDA (mata terbuka & wajah utuh) untuk Split-Screen Cover 1080x1920.
+    Jika video hanya memiliki 1 pembicara closeup (monolog podcast), pembicara kedua otomatis diekstrak dari wide-shot sudut host."""
     print("📸 Mengekstrak 2 pembicara berbeda (mata terbuka & wajah utuh) dari video asli untuk cover...")
     face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
     eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_eye.xml")
@@ -162,16 +163,20 @@ def generate_split_cover(raw_video: str, title: str, out_cover: str):
     W = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 1920)
     H = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 1080)
 
-    def get_center_signature(frame):
-        crop = frame[int(H * 0.1) : int(H * 0.85), int(W * 0.25) : int(W * 0.75)]
-        return cv2.resize(crop, (120, 120)).astype(float)
-
-    def detect_main_face(gray):
-        faces = face_cascade.detectMultiScale(gray, 1.1, 5)
-        valid = [f for f in faces if f[2] > 160 and f[1] < int(H * 0.55)]
-        if valid:
-            return sorted(valid, key=lambda f: f[2] * f[3], reverse=True)[0]
-        return None
+    def get_clothing_hist(frame, face):
+        fx, fy, fw, fh = face
+        fh_img, fw_img = frame.shape[:2]
+        y1 = min(fh_img - 10, fy + int(fh * 1.05))
+        y2 = min(fh_img, fy + int(fh * 2.3))
+        x1 = max(0, fx + int(fw * 0.15))
+        x2 = min(fw_img, fx + int(fw * 0.85))
+        patch = frame[y1:y2, x1:x2]
+        if patch.size == 0:
+            return np.zeros((8, 8, 8))
+        hsv = cv2.cvtColor(patch, cv2.COLOR_BGR2HSV)
+        hist = cv2.calcHist([hsv], [0, 1, 2], None, [8, 8, 8], [0, 180, 0, 256, 0, 256])
+        cv2.normalize(hist, hist)
+        return hist
 
     def evaluate_eye_openness(gray, face):
         if face is None:
@@ -184,7 +189,7 @@ def generate_split_cover(raw_video: str, title: str, out_cover: str):
         eye_band = gray[ey1:ey2, ex1:ex2]
         if eye_band.size == 0:
             return 0.0
-        eyes = eye_cascade.detectMultiScale(eye_band, 1.08, 4, minSize=(22, 16))
+        eyes = eye_cascade.detectMultiScale(eye_band, 1.08, 4, minSize=(20, 14))
         bw = ex2 - ex1
         left_eyes = [e for e in eyes if (e[0] + e[2] / 2) < bw * 0.5]
         right_eyes = [e for e in eyes if (e[0] + e[2] / 2) >= bw * 0.5]
@@ -198,94 +203,118 @@ def generate_split_cover(raw_video: str, title: str, out_cover: str):
         return both_detected * 800.0 + (c_l + c_r) * 3.0 + (dark_l + dark_r) * 2.0
 
     # Sampling menyeluruh mulai dari detik ke-0 (agar hook pembicara pertama di awal video tidak terlewat)
-    # Langkah per 1 detik di 15 detik awal, dan per 2 detik setelahnya
-    samples = []
+    closeup_samples = []
+    wide_samples = []
     max_scan_sec = min(int(duration) - 1, 135)
     scan_points = list(range(0, min(15, int(duration)))) + list(range(16, max(17, max_scan_sec), 2))
+    
     for sec in scan_points:
         cap.set(cv2.CAP_PROP_POS_MSEC, float(sec) * 1000)
         ret, frame = cap.read()
         if not ret:
             continue
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        face = detect_main_face(gray)
-        sig = get_center_signature(frame)
-        score = evaluate_eye_openness(gray, face)
-        samples.append({"sec": sec, "frame": frame.copy(), "face": face, "sig": sig, "score": score})
+        faces = face_cascade.detectMultiScale(gray, 1.1, 4, minSize=(40, 40))
+        
+        # 1. Closeup detection (w >= 150px)
+        big_faces = [f for f in faces if f[2] >= 150 and f[1] < int(H * 0.55)]
+        if big_faces:
+            bf = sorted(big_faces, key=lambda f: f[2] * f[3], reverse=True)[0]
+            score = evaluate_eye_openness(gray, bf)
+            hist = get_clothing_hist(frame, bf)
+            closeup_samples.append({
+                "sec": sec,
+                "frame": frame.copy(),
+                "face": bf,
+                "hist": hist,
+                "score": score
+            })
+            
+        # 2. Wide shot detection (multiple faces OR small faces OR peripheral faces)
+        small_faces = [f for f in faces if 45 <= f[2] <= 140]
+        right_faces = [f for f in faces if (f[0] + f[2]//2) > W * 0.52]
+        left_faces = [f for f in faces if (f[0] + f[2]//2) < W * 0.48]
+        if len(faces) >= 2 or len(small_faces) >= 1 or len(right_faces) >= 1:
+            sharpness = cv2.Laplacian(gray, cv2.CV_64F).var()
+            wide_samples.append({
+                "sec": sec,
+                "frame": frame.copy(),
+                "faces": faces,
+                "right_faces": right_faces,
+                "left_faces": left_faces,
+                "sharpness": sharpness
+            })
 
     cap.release()
 
-    if not samples:
-        raise RuntimeError("Gagal membaca frame dari video input.")
+    if not closeup_samples:
+        raise RuntimeError("Gagal menemukan wajah pembicara dari video input.")
 
-    # Prioritaskan frame closeup pembicara (face is not None)
-    face_samples = [s for s in samples if s["face"] is not None]
-    if len(face_samples) < 2:
-        face_samples = samples
-
-    # Kelompokkan frame berdasarkan kemiripan visual signature (< 35.0)
-    clusters = []
-    for s in face_samples:
-        placed = False
-        for c in clusters:
-            if np.abs(c[0]["sig"] - s["sig"]).mean() < 35.0:
-                c.append(s)
-                placed = True
-                break
-        if not placed:
-            clusters.append([s])
-
-    # Urutkan cluster berdasarkan jumlah kemunculan
-    clusters.sort(key=lambda c: len(c), reverse=True)
-
-    # Pembicara 1: Ambil frame dengan skor mata terbaik dari cluster pembicara paling dominan
-    speaker1 = max(clusters[0], key=lambda s: s["score"])
-
-    # Pembicara 2: WAJIB orang yang BERBEDA secara visual (diff >= 38.0) dari Pembicara 1
-    # Ini menjamin tidak akan pernah mengambil orang yang sama dari sudut/baju yang identik
-    speaker2 = None
-    for c in clusters[1:]:
-        cand = max(c, key=lambda s: s["score"])
-        diff = float(np.abs(speaker1["sig"] - cand["sig"]).mean())
-        if diff >= 38.0:
-            speaker2 = cand
-            break
-
-    # Fallback jika hanya ada 1 cluster: cari frame dari seluruh face_samples yang paling beda visualnya
-    if speaker2 is None:
-        diff_samples = [s for s in face_samples if float(np.abs(speaker1["sig"] - s["sig"]).mean()) >= 35.0]
-        if diff_samples:
-            speaker2 = max(diff_samples, key=lambda s: s["score"])
-        elif len(clusters) >= 2:
-            speaker2 = max(clusters[1], key=lambda s: s["score"])
-        else:
-            diff_samples = sorted(samples, key=lambda s: np.abs(speaker1["sig"] - s["sig"]).mean(), reverse=True)[:5]
-            speaker2 = max(diff_samples, key=lambda s: s["score"])
-
+    # Pembicara 1: Ambil closeup terbaik (mata paling terbuka)
+    speaker1 = max(closeup_samples, key=lambda s: s["score"])
     print(f"✅ Pembicara 1 dipilih pada detik ke-{speaker1['sec']}s (Eye Score: {speaker1['score']:.1f})")
-    print(f"✅ Pembicara 2 dipilih pada detik ke-{speaker2['sec']}s (Eye Score: {speaker2['score']:.1f})")
 
-    # Crop dengan menjaga tinggi penuh wajah & kepala agar tidak terpotong atas/bawah
-    # Potong 4% margin atas/bawah untuk membuang garis hitam tipis screen-recording jika ada
+    speaker2_img = None
+
+    # Cek apakah ada pembicara kedua dalam kumpulan CLOSEUP yang benar-benar orang lain
+    # (Kemiripan pakaian / clothing similarity < 0.60)
+    other_closeup_candidates = []
+    for s in closeup_samples:
+        sim = cv2.compareHist(speaker1["hist"], s["hist"], cv2.HISTCMP_CORREL)
+        if sim < 0.60:
+            other_closeup_candidates.append((s, sim))
+
+    if other_closeup_candidates:
+        best_cand, best_sim = max(other_closeup_candidates, key=lambda x: x[0]["score"])
+        print(f"✅ Ditemukan closeup pembicara 2 yang BERBEDA pada detik ke-{best_cand['sec']}s (Sim: {best_sim:.2f}, Score: {best_cand['score']:.1f})")
+        
+        y_margin = int(H * 0.04)
+        crop_h = H - 2 * y_margin
+        crop_w = min(W, int(crop_h * (1080 / 960)))
+        face = best_cand["face"]
+        cx = face[0] + face[2] // 2
+        rx = max(0, min(W - crop_w, cx - crop_w // 2))
+        sub = best_cand["frame"][y_margin : y_margin + crop_h, rx : rx + crop_w]
+        speaker2_img = cv2.resize(sub, (1080, 960), interpolation=cv2.INTER_LANCZOS4)
+    else:
+        # JIKA TIDAK ADA CLOSEUP ORANG KEDUA:
+        # Ekstrak orang kedua dari WIDE SHOT (Host podcast di sebelah kanan/kiri studio)!
+        print("⚠️ Video berformat monolog/hanya 1 closeup. Mengekstrak pembicara 2 dari WIDE SHOT...")
+        if wide_samples:
+            best_wide = sorted(wide_samples, key=lambda w: (len(w["right_faces"]) > 0, w["sharpness"]), reverse=True)[0]
+            w_frame = best_wide["frame"]
+            print(f"🎬 Wide shot terbaik dipilih pada detik ke-{best_wide['sec']}s (Sharpness: {best_wide['sharpness']:.1f})")
+            
+            # Crop Host kanan (misal Wendi Cagur) dari wide shot
+            crop_h = int(H * 0.65)
+            crop_w = int(crop_h * (1080 / 960))
+            ry = int(H * 0.18)
+            rx = int(W * 0.60)
+            sub = w_frame[ry : ry + crop_h, rx : rx + crop_w]
+            speaker2_img = cv2.resize(sub, (1080, 960), interpolation=cv2.INTER_LANCZOS4)
+            print("✅ Berhasil mengekstrak pembicara 2 dari wide shot studio!")
+        else:
+            # Fallback horizontal flip jika benar-benar hanya 1 shot
+            y_margin = int(H * 0.04)
+            crop_h = H - 2 * y_margin
+            crop_w = min(W, int(crop_h * (1080 / 960)))
+            cx = speaker1["face"][0] + speaker1["face"][2] // 2
+            rx = max(0, min(W - crop_w, cx - crop_w // 2))
+            sub = speaker1["frame"][y_margin : y_margin + crop_h, rx : rx + crop_w]
+            speaker2_img = cv2.flip(cv2.resize(sub, (1080, 960), interpolation=cv2.INTER_LANCZOS4), 1)
+
+    # Crop Pembicara 1 (Closeup Speaker 1)
     y_margin = int(H * 0.04)
     crop_h = H - 2 * y_margin
     crop_w = min(W, int(crop_h * (1080 / 960)))
+    cx1 = speaker1["face"][0] + speaker1["face"][2] // 2
+    rx1 = max(0, min(W - crop_w, cx1 - crop_w // 2))
+    sub1 = speaker1["frame"][y_margin : y_margin + crop_h, rx1 : rx1 + crop_w]
+    speaker1_img = cv2.resize(sub1, (1080, 960), interpolation=cv2.INTER_LANCZOS4)
 
-    def crop_speaker_standard(s_item):
-        frame = s_item["frame"]
-        face = s_item["face"]
-        fh, fw = frame.shape[:2]
-        if face is not None:
-            cx = face[0] + face[2] // 2
-        else:
-            cx = fw // 2
-        rx = max(0, min(fw - crop_w, cx - crop_w // 2))
-        ry = y_margin
-        sub = frame[ry : ry + crop_h, rx : rx + crop_w]
-        return cv2.resize(sub, (1080, 960), interpolation=cv2.INTER_LANCZOS4)
-
-    top_half = crop_speaker_standard(speaker2)  # Pembicara 2 di atas
-    bot_half = crop_speaker_standard(speaker1)  # Pembicara 1 di bawah
+    # Susun: Pembicara 2 di ATAS, Pembicara 1 di BAWAH
+    top_half = speaker2_img
+    bot_half = speaker1_img
 
     canvas = np.vstack([top_half, bot_half])
     cover_pil = Image.fromarray(cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB))
