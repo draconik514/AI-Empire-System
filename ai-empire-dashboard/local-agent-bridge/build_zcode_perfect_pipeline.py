@@ -254,20 +254,28 @@ def generate_split_cover(raw_video: str, title: str, out_cover: str):
 
     closeup_samples = []
     wide_samples = []
-    max_scan_sec = min(int(duration) - 1, 135)
-    scan_points = list(range(0, min(15, int(duration)))) + list(range(16, max(17, max_scan_sec), 2))
-    
+    max_scan_sec = min(int(duration) - 1, 130)
+    scan_points = list(range(1, max_scan_sec, 3))
+
+    scale_w, scale_h = 640, 360
+    scale_x = W / float(scale_w)
+    scale_y = H / float(scale_h)
+
     for sec in scan_points:
         cap.set(cv2.CAP_PROP_POS_MSEC, float(sec) * 1000)
         ret, frame = cap.read()
         if not ret:
             continue
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        faces = face_cascade.detectMultiScale(gray, 1.1, 4, minSize=(40, 40))
-        
-        # 1. Closeup detection (w >= 150px)
-        big_faces = [f for f in faces if f[2] >= 150 and f[1] < int(H * 0.55)]
+        small_frame = cv2.resize(frame, (scale_w, scale_h))
+        small_gray = cv2.cvtColor(small_frame, cv2.COLOR_BGR2GRAY)
+        s_faces = face_cascade.detectMultiScale(small_gray, 1.12, 3, minSize=(16, 16))
+
+        faces = [(int(fx * scale_x), int(fy * scale_y), int(fw * scale_x), int(fh * scale_y)) for (fx, fy, fw, fh) in s_faces]
+
+        # 1. Closeup detection (w >= 140px)
+        big_faces = [f for f in faces if f[2] >= 140 and f[1] < int(H * 0.55)]
         if big_faces:
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             bf = sorted(big_faces, key=lambda f: f[2] * f[3], reverse=True)[0]
             score = evaluate_eye_openness(gray, bf)
             hist = get_clothing_hist(frame, bf)
@@ -278,13 +286,13 @@ def generate_split_cover(raw_video: str, title: str, out_cover: str):
                 "hist": hist,
                 "score": score
             })
-            
+
         # 2. Wide shot detection (multiple faces OR small faces OR peripheral faces)
         small_faces = [f for f in faces if 45 <= f[2] <= 140]
         right_faces = [f for f in faces if (f[0] + f[2]//2) > W * 0.52]
         left_faces = [f for f in faces if (f[0] + f[2]//2) < W * 0.48]
         if len(faces) >= 2 or len(small_faces) >= 1 or len(right_faces) >= 1:
-            sharpness = cv2.Laplacian(gray, cv2.CV_64F).var()
+            sharpness = cv2.Laplacian(small_gray, cv2.CV_64F).var()
             wide_samples.append({
                 "sec": sec,
                 "frame": frame.copy(),
@@ -483,6 +491,44 @@ def generate_animated_cover_segment(top_half, bot_half, title: str, hook_audio_p
     line1 = " ".join(words[:mid]).upper()
     line2 = " ".join(words[mid:]).upper()
 
+    # Pre-render Banner Asset (Shadow + Yellow Card + Specular Highlight + Text) ONCE
+    card_w, card_h = 940, 240
+    margin = 40
+    asset_w, asset_h = card_w + margin * 2, card_h + margin * 2
+    card_asset = Image.new("RGBA", (asset_w, asset_h), (0, 0, 0, 0))
+
+    # Shadow (blurred once on small card_asset, NOT 1080x1920 120 times!)
+    s_layer = Image.new("RGBA", (asset_w, asset_h), (0, 0, 0, 0))
+    s_draw = ImageDraw.Draw(s_layer)
+    s_draw.rounded_rectangle([margin, margin + 8, margin + card_w, margin + card_h + 8], radius=42, fill=(0, 0, 0, 180))
+    s_layer = s_layer.filter(ImageFilter.GaussianBlur(16))
+    card_asset.paste(s_layer, (0, 0), s_layer)
+
+    # Yellow Card Body
+    c_draw = ImageDraw.Draw(card_asset)
+    c_draw.rounded_rectangle([margin, margin, margin + card_w, margin + card_h], radius=42, fill=(255, 230, 0, 255), outline=(0, 0, 0, 255), width=5)
+    c_draw.rounded_rectangle([margin + 5, margin + 5, margin + card_w - 5, margin + card_h // 2], radius=42, fill=(255, 255, 255, 45))
+
+    # Text on Card
+    font_size = 68
+    try:
+        font = ImageFont.truetype("impact.ttf", font_size)
+    except:
+        font = ImageFont.load_default()
+
+    b1 = c_draw.textbbox((0, 0), line1, font=font, stroke_width=7)
+    w1, h1 = b1[2] - b1[0], b1[3] - b1[1]
+    x1 = margin + (card_w - w1) // 2
+    y1 = margin + (card_h // 2 - h1) // 2 - 6
+
+    b2 = c_draw.textbbox((0, 0), line2, font=font, stroke_width=7)
+    w2, h2 = b2[2] - b2[0], b2[3] - b2[1]
+    x2 = margin + (card_w - w2) // 2
+    y2 = margin + (card_h // 2) + (card_h // 2 - h2) // 2 - 6
+
+    c_draw.text((x1, y1), line1, font=font, fill=(255, 255, 255), stroke_width=7, stroke_fill=(0, 0, 0))
+    c_draw.text((x2, y2), line2, font=font, fill=(0, 0, 0), stroke_width=4, stroke_fill=(255, 255, 255))
+
     temp_video = out_clip_path.replace(".mp4", "_temp_raw.mp4")
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     writer = cv2.VideoWriter(temp_video, fourcc, fps, (1080, 1920))
@@ -495,60 +541,28 @@ def generate_animated_cover_segment(top_half, bot_half, title: str, hook_audio_p
         else:
             scale = 1.0 + 0.012 * math.sin(3.5 * (t - 0.5))
 
+        cw = int(asset_w * scale)
+        ch = int(asset_h * scale)
+        scaled_card = card_asset.resize((cw, ch), Image.Resampling.BILINEAR)
+        px = 540 - (cw // 2)
+        py = 960 - (ch // 2)
+
         frame_pil = base_pil.copy()
-        card_w = int(940 * scale)
-        card_h = int(240 * scale)
-        card_x = (1080 - card_w) // 2
-        card_y = 960 - (card_h // 2)
-        radius = int(42 * scale)
-
-        # Shadow
-        shadow_layer = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
-        s_draw = ImageDraw.Draw(shadow_layer)
-        s_draw.rounded_rectangle([card_x, card_y + 8, card_x + card_w, card_y + card_h + 8], radius=radius, fill=(0, 0, 0, 180))
-        shadow_layer = shadow_layer.filter(ImageFilter.GaussianBlur(16))
-        frame_pil.paste(shadow_layer, (0, 0), shadow_layer)
-
-        # Yellow Card
-        card_layer = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
-        c_draw = ImageDraw.Draw(card_layer)
-        c_draw.rounded_rectangle([card_x, card_y, card_x + card_w, card_y + card_h], radius=radius, fill=(255, 230, 0, 255), outline=(0, 0, 0, 255), width=5)
-        c_draw.rounded_rectangle([card_x + 5, card_y + 5, card_x + card_w - 5, card_y + card_h // 2], radius=radius, fill=(255, 255, 255, 45))
-        frame_pil.paste(card_layer, (0, 0), card_layer)
-
-        # Text
-        draw = ImageDraw.Draw(frame_pil)
-        font_size = int(68 * scale)
-        try:
-            font = ImageFont.truetype("impact.ttf", font_size)
-        except:
-            font = ImageFont.load_default()
-
-        b1 = draw.textbbox((0, 0), line1, font=font, stroke_width=int(7 * scale))
-        w1, h1 = b1[2] - b1[0], b1[3] - b1[1]
-        x1 = (1080 - w1) // 2
-        y1 = card_y + (card_h // 2 - h1) // 2 - int(6 * scale)
-
-        b2 = draw.textbbox((0, 0), line2, font=font, stroke_width=int(7 * scale))
-        w2, h2 = b2[2] - b2[0], b2[3] - b2[1]
-        x2 = (1080 - w2) // 2
-        y2 = card_y + (card_h // 2) + (card_h // 2 - h2) // 2 - int(6 * scale)
-
-        draw.text((x1, y1), line1, font=font, fill=(255, 255, 255), stroke_width=int(7 * scale), stroke_fill=(0, 0, 0))
-        draw.text((x2, y2), line2, font=font, fill=(0, 0, 0), stroke_width=int(4 * scale), stroke_fill=(255, 255, 255))
+        frame_pil.paste(scaled_card, (px, py), scaled_card)
 
         frame_bgr = cv2.cvtColor(np.array(frame_pil), cv2.COLOR_RGB2BGR)
         writer.write(frame_bgr)
 
     writer.release()
 
-    # Mux dengan audio hook AI
+    # Mux dengan audio hook AI (standar 30fps & AAC 44100Hz stereo agar instan concat)
     cmd_mux = [
         "ffmpeg", "-y",
         "-i", temp_video,
         "-i", hook_audio_path,
-        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "26",
-        "-c:a", "aac", "-b:a", "128k",
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "30",
+        "-r", "30",
+        "-c:a", "aac", "-b:a", "128k", "-ar", "44100", "-ac", "2",
         "-pix_fmt", "yuv420p",
         "-shortest",
         out_clip_path
@@ -815,11 +829,11 @@ def render_and_upload(raw_video: str, title: str, source_channel: str, queue_id:
     escaped_ass = ass_path.replace("\\", "/").replace(":", "\\:")
 
     main_filter = (
-        "[0:v]crop=606:1078:650:0,scale=1080:1920:flags=lanczos[vmain];"
+        "[0:v]crop=606:1078:650:0,scale=1080:1920:flags=bicubic[vmain];"
         "[vmain][1:v]overlay=45:55[vwithchannel];"
         f"[vwithchannel][2:v]overlay=360:1730[vwithbadge];"
         f"[vwithbadge]subtitles=filename='{escaped_ass}'[vwithsub];"
-        "[vwithsub]unsharp=5:5:1.1:5:5:0.0,eq=contrast=1.12:brightness=0.01:saturation=1.18[vout]"
+        "[vwithsub]eq=contrast=1.12:brightness=0.01:saturation=1.18[vout]"
     )
 
     cmd_main = [
@@ -833,7 +847,10 @@ def render_and_upload(raw_video: str, title: str, source_channel: str, queue_id:
         "-af", "volume=1.35,highpass=f=80,lowpass=f=12000",
         "-c:v", "libx264",
         "-preset", "ultrafast",
-        "-crf", "28",
+        "-crf", "30",
+        "-maxrate", "1600k",
+        "-bufsize", "3200k",
+        "-r", "30",
         "-c:a", "aac",
         "-b:a", "128k",
         "-ar", "44100",
@@ -845,31 +862,63 @@ def render_and_upload(raw_video: str, title: str, source_channel: str, queue_id:
 
     # 7. Gabungkan: Cover Animasi (dengan AI Hook Voice) + Segmen Video Asli (dengan Suara Aslinya)
     update_queue_progress(queue_id, "Rendering (85%)", "🔗 [85%] Menggabungkan Cover Hook AI + Video Asli...")
-    print("🔗 Menggabungkan Intro Cover Hook AI + Video Asli...")
+    print("🔗 Menggabungkan Intro Cover Hook AI + Video Asli (Stream-Copy Concat)...")
+    concat_list = os.path.join(WORK_DIR, f"concat_{job_id}.txt")
+    with open(concat_list, "w", encoding="utf-8") as f:
+        f.write(f"file '{cover_segment_mp4.replace(chr(92), '/')}'\n")
+        f.write(f"file '{main_segment_mp4.replace(chr(92), '/')}'\n")
+
     cmd_concat = [
         "ffmpeg", "-y",
-        "-i", cover_segment_mp4,
-        "-i", main_segment_mp4,
-        "-filter_complex", (
-            "[0:v]scale=1080:1920,setsar=1[v0];"
-            "[1:v]scale=1080:1920,setsar=1[v1];"
-            "[0:a]aformat=sample_rates=44100:channel_layouts=stereo[a0];"
-            "[1:a]aformat=sample_rates=44100:channel_layouts=stereo[a1];"
-            "[v0][a0][v1][a1]concat=n=2:v=1:a=1[vcat][acat]"
-        ),
-        "-map", "[vcat]",
-        "-map", "[acat]",
-        "-c:v", "libx264",
-        "-preset", "veryfast",
-        "-crf", "30",
-        "-c:a", "aac",
-        "-b:a", "128k",
-        "-pix_fmt", "yuv420p",
+        "-f", "concat",
+        "-safe", "0",
+        "-i", concat_list,
+        "-c", "copy",
         output_mp4
     ]
-    subprocess.run(cmd_concat, check=True)
+    try:
+        subprocess.run(cmd_concat, check=True)
+    except Exception as concat_err:
+        print("⚠️ Concat stream-copy gagal, fallback ke re-encode filter:", concat_err)
+        cmd_concat_fallback = [
+            "ffmpeg", "-y",
+            "-i", cover_segment_mp4,
+            "-i", main_segment_mp4,
+            "-filter_complex", (
+                "[0:v]scale=1080:1920,setsar=1[v0];"
+                "[1:v]scale=1080:1920,setsar=1[v1];"
+                "[0:a]aformat=sample_rates=44100:channel_layouts=stereo[a0];"
+                "[1:a]aformat=sample_rates=44100:channel_layouts=stereo[a1];"
+                "[v0][a0][v1][a1]concat=n=2:v=1:a=1[vcat][acat]"
+            ),
+            "-map", "[vcat]",
+            "-map", "[acat]",
+            "-c:v", "libx264",
+            "-preset", "ultrafast",
+            "-crf", "26",
+            "-c:a", "aac",
+            "-b:a", "128k",
+            "-pix_fmt", "yuv420p",
+            output_mp4
+        ]
+        subprocess.run(cmd_concat_fallback, check=True)
     size_mb = os.path.getsize(output_mp4) / (1024 * 1024)
     print(f"🎉 RENDER SUKSES! File: {output_mp4} ({size_mb:.2f} MB)")
+
+    # Pastikan file < 48.5 MB untuk batas aman Telegram Bot API (50 MB)
+    if size_mb > 48.5:
+        print(f"⚠️ Ukuran file ({size_mb:.2f} MB) mendekati limit Telegram (50 MB). Mengoptimalkan ukuran...")
+        compressed_mp4 = output_mp4.replace(".mp4", "_compressed.mp4")
+        cmd_comp = [
+            "ffmpeg", "-y", "-i", output_mp4,
+            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "32", "-maxrate", "2200k", "-bufsize", "4400k",
+            "-c:a", "copy", compressed_mp4
+        ]
+        subprocess.run(cmd_comp, check=True)
+        if os.path.exists(compressed_mp4):
+            os.replace(compressed_mp4, output_mp4)
+            size_mb = os.path.getsize(output_mp4) / (1024 * 1024)
+            print(f"✅ Video berhasil dioptimalkan: {size_mb:.2f} MB (< 50 MB)")
 
     # 8. Buat Deskripsi & Hashtag YouTube Otomatis (Termasuk Link Sumber)
     update_queue_progress(queue_id, "Rendering (90%)", "🤖 [90%] Menyusun Deskripsi & Hashtag AI...")
@@ -892,7 +941,7 @@ def render_and_upload(raw_video: str, title: str, source_channel: str, queue_id:
     caption = (caption_header + yt_desc_hashtags)[:1020]
 
     cmd_curl = [
-        "curl.exe", "-s", "--retry", "3", "--max-time", "300",
+        "curl.exe", "-sS", "--retry", "3", "--max-time", "180",
         "-X", "POST", url,
         "-F", f"chat_id={TELEGRAM_CHAT_ID}",
         "-F", f"video=@{output_mp4}",
@@ -901,6 +950,21 @@ def render_and_upload(raw_video: str, title: str, source_channel: str, queue_id:
     try:
         res = subprocess.run(cmd_curl, capture_output=True, text=True)
         print("Telegram response:", res.stdout[:200])
+
+        if "413" in res.stdout or "Too Large" in res.stdout:
+            print("⚠️ Telegram menolak file (terlalu besar), mengompres ulang dengan cepat...")
+            compressed_mp4 = output_mp4.replace(".mp4", "_comp_retry.mp4")
+            cmd_comp = [
+                "ffmpeg", "-y", "-i", output_mp4,
+                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "34", "-maxrate", "1800k", "-bufsize", "3600k",
+                "-c:a", "copy", compressed_mp4
+            ]
+            subprocess.run(cmd_comp, check=True)
+            if os.path.exists(compressed_mp4):
+                os.replace(compressed_mp4, output_mp4)
+                size_mb = os.path.getsize(output_mp4) / (1024 * 1024)
+                res = subprocess.run(cmd_curl, capture_output=True, text=True)
+                print("Telegram retry response:", res.stdout[:200])
 
         try:
             requests.post(
@@ -936,7 +1000,7 @@ def render_and_upload(raw_video: str, title: str, source_channel: str, queue_id:
             # 10. Hapus File Sementara untuk Menjaga Laptop Tetap Lega
             print("🧹 Membersihkan file aset sementara agar penyimpanan laptop tetap lega...")
             cleanup_targets = [
-                cover_img, hook_mp3, cover_segment_mp4, main_segment_mp4,
+                cover_img, hook_mp3, cover_segment_mp4, main_segment_mp4, concat_list,
                 badge_img, channel_badge_img, words_json, ass_path, output_mp4
             ]
             if os.path.abspath(raw_video).startswith(os.path.abspath(WORK_DIR)):
