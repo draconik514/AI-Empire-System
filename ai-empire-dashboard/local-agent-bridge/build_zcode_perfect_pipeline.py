@@ -163,46 +163,69 @@ def generate_channel_watermark(out_path: str):
     print(f"✅ Watermark YouTube Channel disimpan: {out_path}")
 
 def generate_glass_badge(source_channel: str, out_path: str):
-    """Menghasilkan watermark badge YouTube Glassmorphism dengan logo merah YouTube & teks tebal"""
-    w, h = 720, 180
-    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
+    """Menghasilkan watermark badge YouTube Kapsul Hitam (Pill Shape) sesuai referensi resmi (media_1793689636013_ef8f29cd.png)"""
+    text = source_channel.upper()
+    try:
+        font = ImageFont.truetype("impact.ttf", 38)
+    except:
+        font = ImageFont.truetype("arialbd.ttf", 36)
 
-    draw.rounded_rectangle([10, 10, w - 10, h - 10], radius=45, fill=(15, 15, 15, 205), outline=(255, 255, 255, 70), width=4)
-    draw.rounded_rectangle([15, 15, w - 15, (h // 2)], radius=40, fill=(255, 255, 255, 30))
+    dummy_draw = ImageDraw.Draw(Image.new("RGBA", (10, 10)))
+    bbox = dummy_draw.textbbox((0, 0), text, font=font)
+    tw = bbox[2] - bbox[0]
+    th = bbox[3] - bbox[1]
 
-    cx = 100
-    cy = h // 2
-    icon_r = 50
-    draw.ellipse([cx - icon_r, cy - icon_r, cx + icon_r, cy + icon_r], fill=(225, 15, 15, 255), outline=(255, 255, 255, 160), width=3)
+    icon_diam = 42
+    padding_x = 22
+    spacing = 14
+    pill_h = 60
+    pill_w = padding_x + icon_diam + spacing + tw + padding_x
 
-    tri_w = 32
-    tri_h = 40
-    points = [
-        (cx - tri_w // 2 + 5, cy - tri_h // 2),
-        (cx - tri_w // 2 + 5, cy + tri_h // 2),
-        (cx + tri_w // 2 + 6, cy)
-    ]
-    draw.polygon(points, fill=(255, 255, 255, 255))
+    # 2x supersampling untuk render ikon & sudut kurva yang super halus dan tajam
+    scale = 2
+    W = pill_w * scale
+    H = pill_h * scale
+    pad_x = padding_x * scale
+    icon_d = icon_diam * scale
+    sp = spacing * scale
+    radius = H // 2
 
     try:
-        font = ImageFont.truetype("impact.ttf", 150)
+        font_hi = ImageFont.truetype("impact.ttf", 38 * scale)
     except:
-        try:
-            font = ImageFont.truetype("arialbd.ttf", 140)
-        except:
-            font = ImageFont.load_default()
+        font_hi = ImageFont.truetype("arialbd.ttf", 36 * scale)
 
-    text = source_channel.upper()
-    text_x = cx + icon_r + 50
-    bbox = draw.textbbox((text_x, 0), text, font=font)
-    text_h = bbox[3] - bbox[1]
-    text_y = cy - text_h // 2 - 12
-    draw.text((text_x, text_y), text, fill=(255, 255, 255, 255), font=font)
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
 
-    badge_360 = img.resize((360, 90), Image.Resampling.LANCZOS)
-    badge_360.save(out_path)
-    print(f"✅ Glassmorphism watermark disimpan: {out_path}")
+    # Dark glass pill body (rounded rectangle)
+    draw.rounded_rectangle([2, 2, W - 2, H - 2], radius=radius, fill=(14, 16, 20, 235), outline=(255, 255, 255, 60), width=3)
+
+    # Red YouTube circle
+    cy = H // 2
+    cx = pad_x + icon_d // 2
+    r = icon_d // 2
+    draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(230, 25, 25, 255))
+
+    # White play triangle
+    tri_s = int(13 * scale)
+    tri_pts = [
+        (cx - tri_s // 2 + 2 * scale, cy - tri_s),
+        (cx - tri_s // 2 + 2 * scale, cy + tri_s),
+        (cx + tri_s + 2 * scale, cy)
+    ]
+    draw.polygon(tri_pts, fill=(255, 255, 255, 255))
+
+    # Channel text
+    tx = cx + r + sp
+    t_bbox = draw.textbbox((0, 0), text, font=font_hi)
+    th_hi = t_bbox[3] - t_bbox[1]
+    ty = cy - th_hi // 2 - 3 * scale
+    draw.text((tx, ty), text, font=font_hi, fill=(255, 255, 255, 255))
+
+    badge = img.resize((pill_w, pill_h), Image.Resampling.LANCZOS)
+    badge.save(out_path)
+    print(f"✅ Glassmorphism watermark disimpan: {out_path} ({pill_w}x{pill_h}px)")
 
 def generate_split_cover(raw_video: str, title: str, out_cover: str):
     """Mengekstrak 2 pembicara UTAMA yang BERBEDA untuk Split-Screen Cover 1080x1920 dengan emoji luar shape.
@@ -276,8 +299,8 @@ def generate_split_cover(raw_video: str, title: str, out_cover: str):
 
         faces = [(int(fx * scale_x), int(fy * scale_y), int(fw * scale_x), int(fh * scale_y)) for (fx, fy, fw, fh) in s_faces]
 
-        # 1. Closeup detection (w >= 160px, must be real head in top half: 80 <= fy <= 0.45*H)
-        big_faces = [f for f in faces if f[2] >= 160 and 80 <= f[1] <= int(H * 0.45)]
+        # 1. Check if frame has closeup (w >= 140 and top half)
+        big_faces = [f for f in faces if f[2] >= 140 and 80 <= f[1] <= int(H * 0.45)]
         if big_faces:
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             bf = sorted(big_faces, key=lambda f: f[2] * f[3], reverse=True)[0]
@@ -293,25 +316,23 @@ def generate_split_cover(raw_video: str, title: str, out_cover: str):
                 "score": score,
                 "bg_hist": bg_hist
             })
-
-        # 2. Studio Wide shot detection (multiple faces OR small faces di area studio)
-        small_faces = [f for f in faces if 35 <= f[2] <= 130 and 100 <= f[1] <= int(H * 0.65)]
-        right_faces = [f for f in faces if (f[0] + f[2]//2) > W * 0.55]
-        left_faces = [f for f in faces if (f[0] + f[2]//2) < W * 0.40]
-        if len(faces) >= 2 or len(small_faces) >= 1:
+        else:
+            # 2. Frame has NO closeup -> Candidate for TRUE studio wide shot!
+            small_faces = [f for f in faces if 35 <= f[2] <= 90 and 150 <= f[1] <= int(H * 0.60)]
             hsv_top = cv2.cvtColor(frame[:int(H * 0.4), :], cv2.COLOR_BGR2HSV)
             green_mask = cv2.inRange(hsv_top, (35, 40, 40), (85, 255, 255))
             green_pct = (cv2.countNonZero(green_mask) / (green_mask.size)) * 100
-            sharpness = cv2.Laplacian(small_gray, cv2.CV_64F).var()
-            wide_samples.append({
-                "sec": sec,
-                "frame": frame.copy(),
-                "faces": faces,
-                "right_faces": right_faces,
-                "left_faces": left_faces,
-                "green_pct": green_pct,
-                "sharpness": sharpness
-            })
+            if len(small_faces) >= 1 and green_pct > 35:
+                right_faces = [f for f in small_faces if (f[0] + f[2]//2) > W * 0.55]
+                sharpness = cv2.Laplacian(small_gray, cv2.CV_64F).var()
+                wide_samples.append({
+                    "sec": sec,
+                    "frame": frame.copy(),
+                    "faces": small_faces,
+                    "right_faces": right_faces,
+                    "green_pct": green_pct,
+                    "sharpness": sharpness
+                })
 
     cap.release()
 
@@ -342,28 +363,40 @@ def generate_split_cover(raw_video: str, title: str, out_cover: str):
         sub = best_cand["frame"][y_margin : y_margin + crop_h, rx : rx + crop_w]
         speaker2_img = cv2.resize(sub, (1080, 960), interpolation=cv2.INTER_LANCZOS4)
     else:
-        print("ℹ️ Video berformat monolog/hanya 1 pembicara closeup. Mengekstrak Pembicara 2 (Host/Wendi) dari WIDE SHOT studio...")
-        if wide_samples:
-            # Cari wide shot studio terbaik dengan wall studio dan ketajaman tinggi
-            best_wide = sorted(wide_samples, key=lambda w: (w.get("green_pct", 0) > 20, len(w["right_faces"]) > 0, w["sharpness"]), reverse=True)[0]
+        print("ℹ️ Video berformat monolog/hanya 1 pembicara closeup. Mengekstrak Pembicara 2 (Host/Wendi) dari TRUE WIDE SHOT studio...")
+        wide_with_right = [w for w in wide_samples if len(w["right_faces"]) > 0]
+        if wide_with_right:
+            best_wide = sorted(wide_with_right, key=lambda w: w["sharpness"], reverse=True)[0]
             w_frame = best_wide["frame"]
-            print(f"🎬 Wide shot studio terbaik dipilih pada detik ke-{best_wide['sec']}s (Green: {best_wide.get('green_pct', 0):.1f}%, Sharpness: {best_wide['sharpness']:.1f})")
-            
+            rf = best_wide["right_faces"][0]
+            rcx = rf[0] + rf[2] // 2
+            rcy = rf[1] + rf[2] // 2
+            print(f"🎬 Wide shot dengan wajah Host dipilih pada detik ke-{best_wide['sec']}s: koordinat wajah ({rcx}, {rcy})")
+            crop_h = int(H * 0.65)
+            crop_w = int(crop_h * (1080 / 960))
+            rx = max(0, min(W - crop_w, rcx - crop_w // 2))
+            ry = max(0, min(H - crop_h, rcy - int(crop_h * 0.28)))
+            sub = w_frame[ry : ry + crop_h, rx : rx + crop_w]
+            speaker2_img = cv2.resize(sub, (1080, 960), interpolation=cv2.INTER_LANCZOS4)
+            print("✅ Berhasil mengekstrak pembicara 2 (Host/Wendi) tepat di tengah!")
+        elif wide_samples:
+            best_wide = sorted(wide_samples, key=lambda w: w["sharpness"], reverse=True)[0]
+            w_frame = best_wide["frame"]
+            print(f"🎬 Wide shot terbaik dipilih pada detik ke-{best_wide['sec']}s (Couch coordinates)")
             crop_h = int(H * 0.65)
             crop_w = int(crop_h * (1080 / 960))
             ry = int(H * 0.18)
-            rx = int(W * 0.59)
+            rx = int(W * 0.60)
             sub = w_frame[ry : ry + crop_h, rx : rx + crop_w]
             speaker2_img = cv2.resize(sub, (1080, 960), interpolation=cv2.INTER_LANCZOS4)
-            print("✅ Berhasil mengekstrak pembicara 2 (Host) dari sofa studio!")
+            print("✅ Berhasil mengekstrak pembicara 2 dari sofa studio!")
         else:
-            y_margin = int(H * 0.04)
-            crop_h = H - 2 * y_margin
-            crop_w = min(W, int(crop_h * (1080 / 960)))
-            cx = speaker1["face"][0] + speaker1["face"][2] // 2
-            rx = max(0, min(W - crop_w, cx - crop_w // 2))
-            sub = speaker1["frame"][y_margin : y_margin + crop_h, rx : rx + crop_w]
-            speaker2_img = cv2.flip(cv2.resize(sub, (1080, 960), interpolation=cv2.INTER_LANCZOS4), 1)
+            crop_h = int(H * 0.65)
+            crop_w = int(crop_h * (1080 / 960))
+            ry = int(H * 0.18)
+            rx = int(W * 0.60)
+            sub = speaker1["frame"][ry : ry + crop_h, rx : rx + crop_w]
+            speaker2_img = cv2.resize(sub, (1080, 960), interpolation=cv2.INTER_LANCZOS4)
 
     # Crop Pembicara 1 (Closeup Speaker 1)
     y_margin = int(H * 0.04)
@@ -813,7 +846,7 @@ def render_and_upload(raw_video: str, title: str, source_channel: str, queue_id:
         "[0:v]crop=606:1078:650:0,scale=1080:1920:flags=bicubic[vmain];"
         "[vmain]unsharp=5:5:0.7:5:5:0.0[vsharp];"
         "[vsharp][1:v]overlay=45:55[vwithchannel];"
-        f"[vwithchannel][2:v]overlay=360:1730[vwithbadge];"
+        f"[vwithchannel][2:v]overlay=(main_w-overlay_w)/2:1735[vwithbadge];"
         f"[vwithbadge]subtitles=filename='{escaped_ass}'[vwithsub];"
         "[vwithsub]eq=contrast=1.06:brightness=0.01:saturation=1.12[vout]"
     )
