@@ -19,6 +19,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "Tidak ada file video yang dikirim" }, { status: 400 });
     }
 
+    // Validasi tipe file — hanya video yang diizinkan
+    const allowedTypes = ["video/mp4", "video/quicktime", "video/x-msvideo", "video/webm"];
+    if (!allowedTypes.includes(file.type) && !file.name.match(/\.(mp4|mov|avi|webm|mkv)$/i)) {
+      return NextResponse.json({ ok: false, error: `Tipe file tidak didukung: ${file.type}. Gunakan MP4/MOV/AVI/WEBM.` }, { status: 400 });
+    }
+
+    // Validasi ukuran file — maks 500 MB untuk mencegah overload RAM
+    const MAX_SIZE_BYTES = 500 * 1024 * 1024;
+    if (file.size > MAX_SIZE_BYTES) {
+      return NextResponse.json({ ok: false, error: `File terlalu besar (${(file.size / (1024*1024)).toFixed(0)} MB). Maks 500 MB.` }, { status: 413 });
+    }
+
     const bridgeDir = path.resolve(process.cwd(), "local-agent-bridge");
     const workDir = path.join(bridgeDir, "render_workspace");
     if (!fs.existsSync(workDir)) {
