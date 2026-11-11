@@ -1095,8 +1095,14 @@ def render_and_upload(raw_video: str, title: str, source_channel: str, queue_id:
     tg_sent_ok = False
     tg_response_text = ""
 
+    # Pastikan file video ada sebelum upload
+    if not os.path.exists(output_mp4):
+        print(f"❌ File video tidak ditemukan: {output_mp4}")
+        update_queue_progress(queue_id, "Error", f"⚠️ File video tidak ditemukan: {output_mp4}")
+        return
+
     cmd_curl = [
-        "curl.exe", "-sS", "--retry", "2", "--max-time", "300",
+        "curl.exe", "-sS", "--retry", "3", "--retry-delay", "5", "--max-time", "360",
         "-X", "POST", url,
         "-F", f"chat_id={TELEGRAM_CHAT_ID}",
         "-F", f"video=@{output_mp4}",
@@ -1104,13 +1110,25 @@ def render_and_upload(raw_video: str, title: str, source_channel: str, queue_id:
         "-F", "supports_streaming=true"
     ]
     try:
-        res = subprocess.run(cmd_curl, capture_output=True, text=True)
+        print(f"📤 Mengupload video {os.path.getsize(output_mp4)/(1024*1024):.1f} MB ke Telegram...")
+        res = subprocess.run(cmd_curl, capture_output=True, text=True, timeout=380)
         tg_response_text = res.stdout
-        print("Telegram response (curl):", tg_response_text[:200])
-        if '"ok":true' in tg_response_text.replace(" ", ""):
+        tg_stderr = res.stderr
+        print(f"Telegram curl returncode: {res.returncode}")
+        print(f"Telegram response (curl): {tg_response_text[:300]}")
+        if tg_stderr:
+            print(f"Telegram curl stderr: {tg_stderr[:200]}")
+        if res.returncode != 0:
+            # curl gagal (DNS error, timeout, dsb)
+            tg_response_text = tg_response_text or f"curl error code {res.returncode}: {tg_stderr[:200]}"
+        elif '"ok":true' in tg_response_text.replace(" ", ""):
             tg_sent_ok = True
+    except subprocess.TimeoutExpired:
+        print("⚠️ curl.exe timeout setelah 380 detik")
+        tg_response_text = "curl timeout setelah 380 detik"
     except Exception as curl_err:
-        print("⚠️ curl.exe gagal:", curl_err)
+        print("⚠️ curl.exe exception:", curl_err)
+        tg_response_text = str(curl_err)
 
     try:
         try:
