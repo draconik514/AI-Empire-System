@@ -10,10 +10,17 @@ import requests
 import cv2
 import numpy as np
 import edge_tts
+from datetime import datetime
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+def log(msg: str, level: str = "INFO"):
+    """Logger terpusat dengan timestamp agar mudah debug di terminal."""
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    prefix = {"INFO": "ℹ️", "OK": "✅", "WARN": "⚠️", "ERROR": "❌"}.get(level, "•")
+    print(f"[{ts}] {prefix} {msg}", flush=True)
 
 BASE_DIR = r"D:\AI-Empire-System"
 DASHBOARD_DIR = os.path.join(BASE_DIR, "ai-empire-dashboard")
@@ -1228,6 +1235,7 @@ def main():
     print(f"🎨 Caption Style: {args.caption_style}")
     print(f"🔗 Source URL: {args.source_url}")
 
+    t_start = time.time()
     render_and_upload(
         input_vid,
         args.title,
@@ -1236,6 +1244,9 @@ def main():
         caption_style=args.caption_style,
         source_url=args.source_url
     )
+    elapsed = time.time() - t_start
+    mins, secs = divmod(int(elapsed), 60)
+    log(f"Pipeline selesai dalam {mins}m {secs}s untuk: {args.title}", "OK")
 
 if __name__ == "__main__":
     main()
