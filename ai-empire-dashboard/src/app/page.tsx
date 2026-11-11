@@ -144,6 +144,8 @@ export default function AIEmpireDashboard() {
         if (data.item) {
           setShortsQueue((prev) => [data.item, ...prev]);
         }
+        // ✅ FIX: Reset file setelah sukses upload agar user tidak bisa double-submit file yang sama
+        setIslamicVideoFile(null);
         notify("🎉 Video mentah diterima! Sedang diedit otomatis ala Z-Code di laptop lokal & langsung dikirim ke Telegram!");
       } else {
         notify("Gagal memproses: " + (data.error || "Unknown error"));

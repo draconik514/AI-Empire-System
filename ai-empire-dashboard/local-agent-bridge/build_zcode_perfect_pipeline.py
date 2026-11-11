@@ -1159,6 +1159,15 @@ def render_and_upload(raw_video: str, title: str, source_channel: str, queue_id:
                 except Exception as clean_err:
                     print(f"⚠️ Gagal menghapus {target_file}: {clean_err}")
             print("✅ Pembersihan selesai! Penyimpanan laptop tetap bersih.")
+        else:
+            # ❌ FIX: Jika video gagal terkirim, update status ke Error agar tidak stuck di 95%
+            err_detail = tg_response_text[:300] if tg_response_text else "Tidak ada response dari Telegram API"
+            print(f"❌ Video GAGAL dikirim ke Telegram! Response: {err_detail}")
+            update_queue_progress(
+                queue_id,
+                "Error",
+                f"⚠️ Gagal upload video ke Telegram. Response: {err_detail[:200]}"
+            )
     except Exception as e:
         print("Gagal upload Telegram:", e)
         update_queue_progress(queue_id, "Error", f"⚠️ Gagal kirim ke Telegram: {e}")
