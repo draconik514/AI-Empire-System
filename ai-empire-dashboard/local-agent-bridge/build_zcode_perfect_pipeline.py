@@ -322,13 +322,11 @@ def generate_split_cover(raw_video: str, title: str, out_cover: str):
 
         # 1. Deteksi Scene Wide / Dua Orang Bersama (Studio Two-Shot)
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-        green_mask = cv2.inRange(hsv, (35, 40, 40), (85, 255, 255))
-        green_pct = (cv2.countNonZero(green_mask) / (W * H)) * 100
+        upper_faces = [f for f in faces if f[2] >= 65 and f[1] < H * 0.50]
+        left_faces = [f for f in upper_faces if (f[0] + f[2] // 2) < W * 0.48]
+        right_faces = [f for f in upper_faces if (f[0] + f[2] // 2) > W * 0.52]
 
-        left_faces = [f for f in faces if (f[0] + f[2] // 2) < W * 0.45]
-        right_faces = [f for f in faces if (f[0] + f[2] // 2) > W * 0.55]
-
-        if (len(left_faces) > 0 and len(right_faces) > 0) or (len(faces) >= 2 and green_pct > 25) or (green_pct > 35 and len(faces) >= 1 and faces[0][2] < 120):
+        if (len(left_faces) > 0 and len(right_faces) > 0) or (len(upper_faces) >= 2):
             sharpness = cv2.Laplacian(gray, cv2.CV_64F).var()
             two_shot_frames.append({
                 "sec": sec,
@@ -337,8 +335,8 @@ def generate_split_cover(raw_video: str, title: str, out_cover: str):
             })
 
         # 2. Deteksi Scene Close-up (Satu orang dominan)
-        big_faces = [f for f in faces if f[2] >= 150 and 70 <= f[1] <= int(H * 0.48)]
-        if big_faces and len(faces) <= 2:
+        big_faces = [f for f in faces if f[2] >= 140 and 50 <= f[1] <= int(H * 0.50)]
+        if big_faces and len(faces) <= 3:
             bf = sorted(big_faces, key=lambda f: f[2] * f[3], reverse=True)[0]
             fx, fy, fw, fh = bf
             face_crop = cv2.resize(gray[fy : fy + fh, fx : fx + fw], (100, 100))
@@ -371,54 +369,91 @@ def generate_split_cover(raw_video: str, title: str, out_cover: str):
         corr = cv2.matchTemplate(speaker1["face_crop"], c["face_crop"], cv2.TM_CCOEFF_NORMED)[0][0]
         torso_sim = cv2.compareHist(speaker1["torso_hist"], c["torso_hist"], cv2.HISTCMP_CORREL) if (speaker1["torso_hist"] is not None and c["torso_hist"] is not None) else 0.0
 
-        # Pembicara lain yang berbeda WAJIB memiliki fitur wajah berbeda (corr < 0.35) DAN pakaian berbeda (torso_sim < 0.65)
-        if corr < 0.35 and torso_sim < 0.65:
+        # Longgarkan threshold: wajah berbeda (corr < 0.55) ATAU pakaian berbeda (torso_sim < 0.75)
+        # Ini mendeteksi orang yang angle-nya sedikit berbeda (seperti host vs guest di podcast)
+        time_gap = abs(c["sec"] - speaker1["sec"])
+        is_different_scene = time_gap >= 5  # Beda scene jika jarak > 5 detik
+        if (corr < 0.55 or torso_sim < 0.75) and is_different_scene:
             distinct_closeups.append((c, corr, torso_sim))
 
-    if distinct_closeups:
-        best_cand = max(distinct_closeups, key=lambda x: x[0]["score"])[0]
-        print(f"✅ Ditemukan closeup pembicara 2 yang BERBEDA pada detik ke-{best_cand['sec']}s (Score: {best_cand['score']:.1f})")
-        
-        y_margin = int(H * 0.04)
-        crop_h = H - 2 * y_margin
-        crop_w = min(W, int(crop_h * (1080 / 960)))
-        face = best_cand["face"]
-        cx = face[0] + face[2] // 2
-        rx = max(0, min(W - crop_w, cx - crop_w // 2))
-        sub = best_cand["frame"][y_margin : y_margin + crop_h, rx : rx + crop_w]
-        speaker2_img = cv2.resize(sub, (1080, 960), interpolation=cv2.INTER_LANCZOS4)
-    elif two_shot_frames:
+    # 1. Prioritas Utama: Jika ada scene two-shot / wide shot (Deddy & Felix berdua di studio)
+    if two_shot_frames:
+        # Cari frame two-shot dengan ketajaman terbaik
         best_wide = max(two_shot_frames, key=lambda t: t["sharpness"])
-        print(f"🎬 Mengekstrak Pembicara 2 (Host/Wendi) dari Wide Shot Studio pada detik ke-{best_wide['sec']}s (Sharpness: {best_wide['sharpness']:.1f})...")
         w_frame = best_wide["frame"]
-        crop_h = int(H * 0.75)
-        crop_w = int(crop_h * (1080 / 960))
-        ry = int(H * 0.16)
-        rx = int(W - crop_w - 40)
-        sub = w_frame[ry : ry + crop_h, rx : rx + crop_w]
-        speaker2_img = cv2.resize(sub, (1080, 960), interpolation=cv2.INTER_LANCZOS4)
-        print("✅ Berhasil mengekstrak pembicara 2 dari sofa studio!")
-    else:
-        print("ℹ️ Menggunakan koordinat studio sofa fallback...")
-        cap2 = cv2.VideoCapture(raw_video)
-        cap2.set(cv2.CAP_PROP_POS_MSEC, 20000)
-        _, f_couch = cap2.read()
-        cap2.release()
-        crop_h = int(H * 0.75)
-        crop_w = int(crop_h * (1080 / 960))
-        ry = int(H * 0.16)
-        rx = int(W - crop_w - 40)
-        sub = f_couch[ry : ry + crop_h, rx : rx + crop_w]
-        speaker2_img = cv2.resize(sub, (1080, 960), interpolation=cv2.INTER_LANCZOS4)
+        w_gray = cv2.cvtColor(w_frame, cv2.COLOR_BGR2GRAY)
+        w_faces = face_cascade.detectMultiScale(w_gray, 1.15, 4, minSize=(60, 60))
+        w_valid = [f for f in w_faces if f[2] >= 75 and f[1] < H * 0.50]
+        w_valid = sorted(w_valid, key=lambda f: f[0])  # Urutkan dari kiri ke kanan
+        
+        # Jika ada minimal 2 orang di wide shot: orang kiri adalah Host (Deddy), orang kanan adalah Guest (Felix)
+        if len(w_valid) >= 2:
+            print(f"🎬 Mengekstrak 2 Pembicara Berbeda (Host & Guest) dari frame Two-Shot studio detik ke-{best_wide['sec']}s...")
+            host_face = w_valid[0]   # Deddy (kiri)
+            guest_face = w_valid[1]  # Felix (kanan)
+            
+            crop_h = int(H * 0.85)
+            crop_w = int(crop_h * (1080 / 960))
+            
+            # Crop Host (Deddy) untuk Bagian Atas
+            cx_h = host_face[0] + host_face[2] // 2
+            rx_h = max(0, min(W - crop_w, cx_h - crop_w // 2))
+            ry_h = max(0, min(H - crop_h, host_face[1] - int(host_face[3] * 0.35)))
+            sub_h = w_frame[ry_h : ry_h + crop_h, rx_h : rx_h + crop_w]
+            speaker2_img = cv2.resize(sub_h, (1080, 960), interpolation=cv2.INTER_LANCZOS4)
+            print("✅ Berhasil mengekstrak Pembicara 2 (Host Deddy) dari Two-Shot studio!")
+            
+            # Khusus untuk Pembicara 1: Gunakan Close-up Ustadz Felix jika ada, agar gambar sangat tajam
+            # Atau crop dari sisi kanan frame wide shot
+            if speaker1:
+                cx1 = speaker1["face"][0] + speaker1["face"][2] // 2
+                rx1 = max(0, min(W - crop_w, cx1 - crop_w // 2))
+                ry1 = max(0, min(H - crop_h, speaker1["face"][1] - int(speaker1["face"][3] * 0.35)))
+                sub1 = speaker1["frame"][ry1 : ry1 + crop_h, rx1 : rx1 + crop_w]
+                speaker1_img = cv2.resize(sub1, (1080, 960), interpolation=cv2.INTER_LANCZOS4)
+            else:
+                cx_g = guest_face[0] + guest_face[2] // 2
+                rx_g = max(0, min(W - crop_w, cx_g - crop_w // 2))
+                ry_g = max(0, min(H - crop_h, guest_face[1] - int(guest_face[3] * 0.35)))
+                sub_g = w_frame[ry_g : ry_g + crop_h, rx_g : rx_g + crop_w]
+                speaker1_img = cv2.resize(sub_g, (1080, 960), interpolation=cv2.INTER_LANCZOS4)
+        else:
+            two_shot_frames = []  # Fallback ke distinct closeups
+            
+    if speaker2_img is None:
+        if distinct_closeups:
+            best_cand = max(distinct_closeups, key=lambda x: x[0]["score"])[0]
+            print(f"✅ Ditemukan closeup pembicara 2 yang BERBEDA pada detik ke-{best_cand['sec']}s (Score: {best_cand['score']:.1f})")
+            
+            crop_h = int(H * 0.85)
+            crop_w = int(crop_h * (1080 / 960))
+            face = best_cand["face"]
+            cx = face[0] + face[2] // 2
+            rx = max(0, min(W - crop_w, cx - crop_w // 2))
+            ry = max(0, min(H - crop_h, face[1] - int(face[3] * 0.35)))
+            sub = best_cand["frame"][ry : ry + crop_h, rx : rx + crop_w]
+            speaker2_img = cv2.resize(sub, (1080, 960), interpolation=cv2.INTER_LANCZOS4)
+        else:
+            print("ℹ️ Menggunakan koordinat studio sofa fallback...")
+            cap2 = cv2.VideoCapture(raw_video)
+            cap2.set(cv2.CAP_PROP_POS_MSEC, 20000)
+            _, f_couch = cap2.read()
+            cap2.release()
+            crop_h = int(H * 0.85)
+            crop_w = int(crop_h * (1080 / 960))
+            ry = int(H * 0.16)
+            rx = int(W - crop_w - 40)
+            sub = f_couch[ry : ry + crop_h, rx : rx + crop_w]
+            speaker2_img = cv2.resize(sub, (1080, 960), interpolation=cv2.INTER_LANCZOS4)
 
-    # Crop Pembicara 1 (Closeup Speaker 1)
-    y_margin = int(H * 0.04)
-    crop_h = H - 2 * y_margin
-    crop_w = min(W, int(crop_h * (1080 / 960)))
-    cx1 = speaker1["face"][0] + speaker1["face"][2] // 2
-    rx1 = max(0, min(W - crop_w, cx1 - crop_w // 2))
-    sub1 = speaker1["frame"][y_margin : y_margin + crop_h, rx1 : rx1 + crop_w]
-    speaker1_img = cv2.resize(sub1, (1080, 960), interpolation=cv2.INTER_LANCZOS4)
+        # Crop Pembicara 1 (Closeup Speaker 1)
+        crop_h = int(H * 0.85)
+        crop_w = int(crop_h * (1080 / 960))
+        cx1 = speaker1["face"][0] + speaker1["face"][2] // 2
+        rx1 = max(0, min(W - crop_w, cx1 - crop_w // 2))
+        ry1 = max(0, min(H - crop_h, speaker1["face"][1] - int(speaker1["face"][3] * 0.35)))
+        sub1 = speaker1["frame"][ry1 : ry1 + crop_h, rx1 : rx1 + crop_w]
+        speaker1_img = cv2.resize(sub1, (1080, 960), interpolation=cv2.INTER_LANCZOS4)
 
     # Gabungkan: Pembicara 2 di Atas, Pembicara 1 di Bawah
     top_half = speaker2_img
@@ -846,8 +881,8 @@ def calculate_smart_crop_timeline(video_path: str, crop_w: int = 606, crop_h: in
     face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
     default_x = max(0, min(W - crop_w, (W - crop_w) // 2))
 
-    # Pindai setiap 0.75 detik untuk mendeteksi siapa yang aktif berbicara
-    time_points = np.arange(0, duration, 0.75)
+    # Pindai setiap 0.5 detik untuk respon cut yang lebih tajam & presisi
+    time_points = np.arange(0, duration, 0.5)
     raw_positions = []
     prev_active_cx = W // 2
 
@@ -863,10 +898,25 @@ def calculate_smart_crop_timeline(video_path: str, crop_w: int = 606, crop_h: in
         gray2 = cv2.cvtColor(f2, cv2.COLOR_BGR2GRAY)
 
         faces = face_cascade.detectMultiScale(gray1, 1.15, 4, minSize=(60, 60))
-        valid_faces = [f for f in faces if f[2] >= 75 and f[1] < H * 0.65]
+        # Filter ketat: Hanya wajah di separuh atas layar (menghindari deteksi tangan/subtitel/layar laptop di bawah)
+        valid_faces = [f for f in faces if f[2] >= 75 and f[1] < H * 0.50]
 
         if len(valid_faces) == 0:
-            raw_positions.append((t, prev_active_cx))
+            # Fallback jika wajah menoleh/profil: deteksi daerah kulit terang di separuh atas
+            hsv = cv2.cvtColor(f1, cv2.COLOR_BGR2HSV)
+            skin = cv2.inRange(hsv, (0, 25, 50), (30, 200, 255))
+            contours, _ = cv2.findContours(skin[:int(H * 0.50), :], cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            found_skin = False
+            if contours:
+                best_c = max(contours, key=cv2.contourArea)
+                if cv2.contourArea(best_c) > 1200:
+                    bx, by, bw, bh = cv2.boundingRect(best_c)
+                    skin_cx = bx + bw // 2
+                    prev_active_cx = skin_cx
+                    raw_positions.append((t, skin_cx))
+                    found_skin = True
+            if not found_skin:
+                raw_positions.append((t, prev_active_cx))
         elif len(valid_faces) == 1:
             cx = valid_faces[0][0] + valid_faces[0][2] // 2
             prev_active_cx = cx
@@ -906,7 +956,7 @@ def calculate_smart_crop_timeline(video_path: str, crop_w: int = 606, crop_h: in
     if not raw_positions:
         return str(default_x)
 
-    # Filter Stabilitas: Gabungkan perpindahan yang durasinya < 2.0s agar transisi kamera mulus layaknya editor podcast profesional
+    # Filter Stabilitas: Transisi kamera instan jika lompatan scene > 200px (scene switch)
     segments = []
     current_x = max(0, min(W - crop_w, raw_positions[0][1] - crop_w // 2))
     seg_start = 0.0
@@ -915,7 +965,8 @@ def calculate_smart_crop_timeline(video_path: str, crop_w: int = 606, crop_h: in
         t, cx = raw_positions[i]
         target_x = max(0, min(W - crop_w, cx - crop_w // 2))
 
-        if abs(target_x - current_x) > 160 and (t - seg_start) >= 2.0:
+        # Jika perpindahan kamera signifikan (ganti orang/scene switch) dengan jeda minimal 1.2 detik
+        if abs(target_x - current_x) > 150 and (t - seg_start) >= 1.2:
             segments.append((seg_start, t, current_x))
             current_x = target_x
             seg_start = t
