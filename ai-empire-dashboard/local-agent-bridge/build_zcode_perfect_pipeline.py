@@ -84,20 +84,28 @@ def update_queue_progress(queue_id: str, status: str, hook_text: str = None, ful
     if telegram_url is not None:
         payload["telegram_message_url"] = telegram_url
 
-    try:
-        requests.patch(
-            url,
-            headers={
-                "apikey": supabase_key,
-                "Authorization": f"Bearer {supabase_key}",
-                "Content-Type": "application/json",
-                "Prefer": "return=minimal"
-            },
-            json=payload,
-            timeout=10
-        )
-    except Exception as e:
-        print(f"⚠️ Gagal update progress Supabase: {e}")
+    # Retry up to 3x dengan backoff agar tidak gagal karena hiccup jaringan sesaat
+    for attempt in range(1, 4):
+        try:
+            resp = requests.patch(
+                url,
+                headers={
+                    "apikey": supabase_key,
+                    "Authorization": f"Bearer {supabase_key}",
+                    "Content-Type": "application/json",
+                    "Prefer": "return=minimal"
+                },
+                json=payload,
+                timeout=10
+            )
+            if resp.status_code in (200, 204):
+                break
+            else:
+                print(f"⚠️ Supabase PATCH status {resp.status_code} (attempt {attempt}/3)")
+        except Exception as e:
+            print(f"⚠️ Gagal update progress Supabase (attempt {attempt}/3): {e}")
+            if attempt < 3:
+                time.sleep(2 * attempt)
 
 def format_ass_time(sec: float) -> str:
     h = int(sec // 3600)
