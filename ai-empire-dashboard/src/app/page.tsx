@@ -57,6 +57,9 @@ export default function AIEmpireDashboard() {
   const [islamicCaptionStyle, setIslamicCaptionStyle] = useState<
     "yellow" | "green_emoji" | "monochrome"
   >("yellow");
+  const [islamicCoverStyle, setIslamicCoverStyle] = useState<
+    "black_yellow" | "cloud_emerald" | "cyber_crimson"
+  >("black_yellow");
   const [islamicVideoFile, setIslamicVideoFile] = useState<File | null>(null);
   const [isProcessingIslamic, setIsProcessingIslamic] = useState(false);
   const [optSmartCrop, setOptSmartCrop] = useState(true);
@@ -133,6 +136,7 @@ export default function AIEmpireDashboard() {
       formData.append("title", islamicTitle);
       formData.append("source", islamicSourceYt || "YNTV");
       formData.append("caption_style", islamicCaptionStyle);
+      formData.append("cover_style", islamicCoverStyle);
       formData.append("source_url", islamicSourceUrl.trim());
 
       const res = await fetch("/api/shorts/upload", {
@@ -587,6 +591,89 @@ export default function AIEmpireDashboard() {
                         </div>
                         <div className="mt-2.5 pt-2 border-t border-slate-800/80 text-center font-black text-xs">
                           <span className="text-white">JAKARTA ITU BANYAK</span>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 3 Cover Title Shape & Color Styles */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2.5">
+                      Pilih Bentuk & Warna Shape Title Box Cover:
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {/* Varian 1: Hitam Glass + Kuning */}
+                      <button
+                        type="button"
+                        onClick={() => setIslamicCoverStyle("black_yellow")}
+                        className={`p-3.5 rounded-xl border text-left transition-all relative ${
+                          islamicCoverStyle === "black_yellow"
+                            ? "bg-amber-500/15 border-amber-400 ring-2 ring-amber-400/30 shadow-lg shadow-amber-500/10"
+                            : "bg-[#14192b] border-slate-800 hover:border-slate-700"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-xs font-black text-amber-400">🟡 Glass & Kuning</span>
+                          {islamicCoverStyle === "black_yellow" && (
+                            <CheckCircle2 className="w-4 h-4 text-amber-400" />
+                          )}
+                        </div>
+                        <div className="text-[10px] text-slate-400 leading-tight">
+                          Rounded pill: Paruh atas hitam glass transparan, paruh bawah kuning solid.
+                        </div>
+                        <div className="mt-2.5 pt-2 border-t border-slate-800/80 text-center font-black text-[11px]">
+                          <div className="bg-black/60 text-white rounded-t px-2 py-0.5 border border-black/80">JUDUL ATAS</div>
+                          <div className="bg-[#FFDE00] text-black font-extrabold rounded-b px-2 py-0.5 border-x border-b border-black">SUBJUDUL KUNING</div>
+                        </div>
+                      </button>
+
+                      {/* Varian 2: Bentuk Awan (Cloud Emerald) */}
+                      <button
+                        type="button"
+                        onClick={() => setIslamicCoverStyle("cloud_emerald")}
+                        className={`p-3.5 rounded-xl border text-left transition-all relative ${
+                          islamicCoverStyle === "cloud_emerald"
+                            ? "bg-emerald-500/15 border-emerald-400 ring-2 ring-emerald-400/30 shadow-lg shadow-emerald-500/10"
+                            : "bg-[#14192b] border-slate-800 hover:border-slate-700"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-xs font-black text-emerald-400">☁️ Awan Emerald</span>
+                          {islamicCoverStyle === "cloud_emerald" && (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          )}
+                        </div>
+                        <div className="text-[10px] text-slate-400 leading-tight">
+                          Siluet awan organik (puffy cloud) gelap dengan aksen hijau emerald & cyan cerah.
+                        </div>
+                        <div className="mt-2.5 pt-2 border-t border-slate-800/80 text-center font-black text-[11px]">
+                          <div className="bg-[#0c121e]/90 text-white rounded-full px-2 py-0.5 border border-emerald-500/30">☁️ JUDUL AWAN</div>
+                          <div className="bg-[#00E1A0] text-black font-extrabold rounded-xl px-2 py-0.5 mt-0.5 border border-black">EMERALD ACCENT</div>
+                        </div>
+                      </button>
+
+                      {/* Varian 3: Cyber Octagon Badge (Crimson Red) */}
+                      <button
+                        type="button"
+                        onClick={() => setIslamicCoverStyle("cyber_crimson")}
+                        className={`p-3.5 rounded-xl border text-left transition-all relative ${
+                          islamicCoverStyle === "cyber_crimson"
+                            ? "bg-rose-500/15 border-rose-400 ring-2 ring-rose-400/30 shadow-lg shadow-rose-500/10"
+                            : "bg-[#14192b] border-slate-800 hover:border-slate-700"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-xs font-black text-rose-400">⚡ Badge Crimson</span>
+                          {islamicCoverStyle === "cyber_crimson" && (
+                            <CheckCircle2 className="w-4 h-4 text-rose-400" />
+                          )}
+                        </div>
+                        <div className="text-[10px] text-slate-400 leading-tight">
+                          Sudut potong tegas (chamfer octagon) futuristik warna navy & neon crimson red.
+                        </div>
+                        <div className="mt-2.5 pt-2 border-t border-slate-800/80 text-center font-black text-[11px]">
+                          <div className="bg-[#120c22]/90 text-white px-2 py-0.5 border-x border-t border-black">⚡ JUDUL BADGE</div>
+                          <div className="bg-[#FF1E55] text-white font-extrabold px-2 py-0.5 border-x border-b border-black">CRIMSON NEON</div>
                         </div>
                       </button>
                     </div>

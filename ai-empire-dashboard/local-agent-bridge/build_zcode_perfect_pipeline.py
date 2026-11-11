@@ -253,8 +253,12 @@ def generate_glass_badge(source_channel: str, out_path: str):
     badge.save(out_path)
     print(f"✅ Watermark Glass Badge Kapsul disimpan: {out_path} ({target_w}x{target_h}px)")
 
-def generate_split_cover(raw_video: str, title: str, out_cover: str):
-    """Mengekstrak 2 pembicara UTAMA yang BERBEDA untuk Split-Screen Cover 1080x1920 dengan emoji luar shape.
+def generate_split_cover(raw_video: str, title: str, out_cover: str, cover_style: str = "black_yellow"):
+    """Mengekstrak 2 pembicara UTAMA yang BERBEDA untuk Split-Screen Cover 1080x1920.
+    Mendukung variasi bentuk & warna shape title:
+      1. 'black_yellow' (Default): Rounded glassmorphism hitam transparan + banner kuning solid.
+      2. 'cloud_emerald' (Awan): Bentuk awan organik (puffy cloud) gelap dengan aksen hijau emerald/cyan.
+      3. 'cyber_crimson' (Cyber/Octagon): Bentuk emblem bersudut tegas (chamfer cut) neon crimson/magenta.
     Mengembalikan (top_half, bot_half) berupa gambar numpy BGR 1080x960."""
     print("📸 Mengekstrak 2 pembicara berbeda (mata terbuka & wajah utuh) dari video asli untuk cover...")
     face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
@@ -461,31 +465,107 @@ def generate_split_cover(raw_video: str, title: str, out_cover: str):
     canvas = np.vstack([top_half, bot_half])
     cover_pil = Image.fromarray(cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB))
 
-    # Center Black Glass + Yellow Card Banner (Sesuai Referensi Dua Warna)
-    card_w = 940
+    # Pemilihan Variasi Bentuk & Warna Shape Title Cover
+    card_w = 950
     card_h = 240
     card_x = (1080 - card_w) // 2
     card_y = 960 - (card_h // 2)
     y_mid = card_y + (card_h // 2)
-    radius = 42
 
-    shadow_layer = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
-    s_draw = ImageDraw.Draw(shadow_layer)
-    s_draw.rounded_rectangle([card_x, card_y + 8, card_x + card_w, card_y + card_h + 8], radius=radius, fill=(0, 0, 0, 180))
-    shadow_layer = shadow_layer.filter(ImageFilter.GaussianBlur(18))
-    cover_pil.paste(shadow_layer, (0, 0), shadow_layer)
+    if cover_style == "cloud_emerald":
+        # ☁️ VARIAN 2: BENTUK AWAN (Cloud Silhouette, Dark Glass & Vivid Emerald/Cyan)
+        cloud_puffs = [
+            (card_x + 90, card_y + 120, 120),
+            (card_x + 220, card_y + 70, 130),
+            (card_x + 390, card_y + 50, 150),
+            (card_x + 560, card_y + 55, 145),
+            (card_x + 730, card_y + 70, 135),
+            (card_x + 860, card_y + 120, 115),
+            (card_x + 770, card_y + 180, 120),
+            (card_x + 590, card_y + 200, 130),
+            (card_x + 370, card_y + 195, 135),
+            (card_x + 180, card_y + 175, 120),
+        ]
+        # Shadow awan
+        shadow_layer = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
+        s_draw = ImageDraw.Draw(shadow_layer)
+        for cx_p, cy_p, r_p in cloud_puffs:
+            s_draw.ellipse([cx_p - r_p, cy_p - r_p + 10, cx_p + r_p, cy_p + r_p + 10], fill=(0, 0, 0, 180))
+        shadow_layer = shadow_layer.filter(ImageFilter.GaussianBlur(16))
+        cover_pil.paste(shadow_layer, (0, 0), shadow_layer)
 
-    card_layer = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
-    c_draw = ImageDraw.Draw(card_layer)
-    # 1. Paruh Atas: Hitam Glassmorphism Transparan (Tembus pandang melihat latar belakang video)
-    c_draw.rounded_rectangle([card_x, card_y, card_x + card_w, y_mid], radius=radius, corners=(True, True, False, False), fill=(10, 12, 16, 145))
-    c_draw.rounded_rectangle([card_x + 4, card_y + 3, card_x + card_w - 4, card_y + 32], radius=radius - 4, corners=(True, True, False, False), fill=(255, 255, 255, 30))
-    # 2. Paruh Bawah: Kuning Terang Solid
-    c_draw.rounded_rectangle([card_x, y_mid, card_x + card_w, card_y + card_h], radius=radius, corners=(False, False, True, True), fill=(255, 222, 0, 255))
-    # 3. Garis Tepi & Pemisah Hitam Pekat
-    c_draw.rounded_rectangle([card_x, card_y, card_x + card_w, card_y + card_h], radius=radius, outline=(0, 0, 0, 255), width=5)
-    c_draw.line([(card_x, y_mid), (card_x + card_w, y_mid)], fill=(0, 0, 0, 255), width=5)
-    cover_pil.paste(card_layer, (0, 0), card_layer)
+        # Body awan
+        cloud_layer = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
+        c_draw = ImageDraw.Draw(cloud_layer)
+        for cx_p, cy_p, r_p in cloud_puffs:
+            c_draw.ellipse([cx_p - r_p, cy_p - r_p, cx_p + r_p, cy_p + r_p], fill=(12, 18, 30, 215))
+        c_draw.rounded_rectangle([card_x + 60, card_y + 40, card_x + card_w - 60, card_y + card_h - 20], radius=50, fill=(12, 18, 30, 215))
+        # Banner bawah hijau emerald
+        c_draw.rounded_rectangle([card_x + 80, card_y + 125, card_x + card_w - 80, card_y + card_h - 15], radius=28, fill=(0, 225, 160, 255), outline=(0, 0, 0, 255), width=4)
+        cover_pil.paste(cloud_layer, (0, 0), cloud_layer)
+
+    elif cover_style == "cyber_crimson":
+        # ⚡ VARIAN 3: BENTUK BADGE / OCTAGON (Chamfer Corner, Deep Navy & Neon Crimson)
+        cut = 45
+        poly_top = [
+            (card_x + cut, card_y),
+            (card_x + card_w - cut, card_y),
+            (card_x + card_w, card_y + cut),
+            (card_x + card_w, y_mid),
+            (card_x, y_mid),
+            (card_x, card_y + cut),
+        ]
+        poly_bot = [
+            (card_x, y_mid),
+            (card_x + card_w, y_mid),
+            (card_x + card_w, card_y + card_h - cut),
+            (card_x + card_w - cut, card_y + card_h),
+            (card_x + cut, card_y + card_h),
+            (card_x, card_y + card_h - cut),
+        ]
+        poly_full = [
+            (card_x + cut, card_y),
+            (card_x + card_w - cut, card_y),
+            (card_x + card_w, card_y + cut),
+            (card_x + card_w, card_y + card_h - cut),
+            (card_x + card_w - cut, card_y + card_h),
+            (card_x + cut, card_y + card_h),
+            (card_x, card_y + card_h - cut),
+            (card_x, card_y + cut),
+        ]
+        # Shadow badge
+        shadow_layer = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
+        s_draw = ImageDraw.Draw(shadow_layer)
+        s_draw.polygon([(p[0], p[1] + 12) for p in poly_full], fill=(0, 0, 0, 190))
+        shadow_layer = shadow_layer.filter(ImageFilter.GaussianBlur(18))
+        cover_pil.paste(shadow_layer, (0, 0), shadow_layer)
+
+        # Body badge
+        badge_layer = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
+        b_draw = ImageDraw.Draw(badge_layer)
+        b_draw.polygon(poly_top, fill=(18, 12, 34, 215))
+        b_draw.polygon(poly_bot, fill=(255, 30, 85, 255))
+        b_draw.polygon(poly_full, outline=(0, 0, 0, 255), width=6)
+        b_draw.line([(card_x, y_mid), (card_x + card_w, y_mid)], fill=(0, 0, 0, 255), width=6)
+        cover_pil.paste(badge_layer, (0, 0), badge_layer)
+
+    else:
+        # 🟡 VARIAN 1: DEFAULT BLACK TRANSLUCENT GLASS + SOLID YELLOW BANNER
+        radius = 42
+        shadow_layer = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
+        s_draw = ImageDraw.Draw(shadow_layer)
+        s_draw.rounded_rectangle([card_x, card_y + 8, card_x + card_w, card_y + card_h + 8], radius=radius, fill=(0, 0, 0, 180))
+        shadow_layer = shadow_layer.filter(ImageFilter.GaussianBlur(18))
+        cover_pil.paste(shadow_layer, (0, 0), shadow_layer)
+
+        card_layer = Image.new("RGBA", (1080, 1920), (0, 0, 0, 0))
+        c_draw = ImageDraw.Draw(card_layer)
+        c_draw.rounded_rectangle([card_x, card_y, card_x + card_w, y_mid], radius=radius, corners=(True, True, False, False), fill=(10, 12, 16, 145))
+        c_draw.rounded_rectangle([card_x + 4, card_y + 3, card_x + card_w - 4, card_y + 32], radius=radius - 4, corners=(True, True, False, False), fill=(255, 255, 255, 30))
+        c_draw.rounded_rectangle([card_x, y_mid, card_x + card_w, card_y + card_h], radius=radius, corners=(False, False, True, True), fill=(255, 222, 0, 255))
+        c_draw.rounded_rectangle([card_x, card_y, card_x + card_w, card_y + card_h], radius=radius, outline=(0, 0, 0, 255), width=5)
+        c_draw.line([(card_x, y_mid), (card_x + card_w, y_mid)], fill=(0, 0, 0, 255), width=5)
+        cover_pil.paste(card_layer, (0, 0), card_layer)
 
     draw = ImageDraw.Draw(cover_pil)
     clean_title = title.replace("\\n", " ").replace("\n", " ").strip()
@@ -983,7 +1063,7 @@ def calculate_smart_crop_timeline(video_path: str, crop_w: int = 606, crop_h: in
 
     return expr
 
-def render_and_upload(raw_video: str, title: str, source_channel: str, queue_id: str = "", caption_style: str = "yellow", source_url: str = ""):
+def render_and_upload(raw_video: str, title: str, source_channel: str, queue_id: str = "", caption_style: str = "yellow", source_url: str = "", cover_style: str = "black_yellow"):
     file_stat = os.stat(raw_video)
     job_id = f"{int(time.time())}_{file_stat.st_size}"
 
@@ -1004,7 +1084,7 @@ def render_and_upload(raw_video: str, title: str, source_channel: str, queue_id:
 
     # 2. Ekstrak 2 Pembicara Berbeda & Gambar Cover Statis
     update_queue_progress(queue_id, "Rendering (25%)", "📸 [25%] Mengekstrak 2 pembicara berbeda & emoji cover...")
-    top_half, bot_half = generate_split_cover(raw_video, title, cover_img)
+    top_half, bot_half = generate_split_cover(raw_video, title, cover_img, cover_style=cover_style)
 
     # 3. AI Voice-Over Hook dari Judul Cover & Animated Motion Cover Segment
     update_queue_progress(queue_id, "Rendering (35%)", "🎙️ [35%] Memproduksi AI Voice-Over Hook & Animasi Motion Cover...")
@@ -1263,6 +1343,7 @@ def main():
     parser.add_argument("--source", default="YNTV")
     parser.add_argument("--queue-id", default="")
     parser.add_argument("--caption-style", default="yellow", choices=["yellow", "green_emoji", "monochrome"])
+    parser.add_argument("--cover-style", default="black_yellow", choices=["black_yellow", "cloud_emerald", "cyber_crimson"])
     parser.add_argument("--source-url", default="")
     args = parser.parse_args()
 
@@ -1284,6 +1365,7 @@ def main():
     print(f"🏷️ Title Cover: {args.title}")
     print(f"📺 Source Watermark: {args.source}")
     print(f"🎨 Caption Style: {args.caption_style}")
+    print(f"🖼️ Cover Shape Style: {args.cover_style}")
     print(f"🔗 Source URL: {args.source_url}")
 
     t_start = time.time()
@@ -1293,7 +1375,8 @@ def main():
         args.source,
         args.queue_id,
         caption_style=args.caption_style,
-        source_url=args.source_url
+        source_url=args.source_url,
+        cover_style=args.cover_style
     )
     elapsed = time.time() - t_start
     mins, secs = divmod(int(elapsed), 60)

@@ -13,6 +13,7 @@ export async function POST(req: NextRequest) {
     const title = (formData.get("title") as string) || "TIDAK ADA TAKDIR YANG SALAH";
     const sourceChannel = (formData.get("source") as string) || "YNTV";
     const captionStyle = (formData.get("caption_style") as string) || "yellow";
+    const coverStyle = (formData.get("cover_style") as string) || "black_yellow";
     const sourceUrl = (formData.get("source_url") as string) || "";
 
     if (!file) {
@@ -82,6 +83,7 @@ export async function POST(req: NextRequest) {
       "--title", title,
       "--source", sourceChannel,
       "--caption-style", captionStyle,
+      "--cover-style", coverStyle,
       "--source-url", sourceUrl,
     ];
     if (queueItem?.id) {
