@@ -11,6 +11,10 @@ out/
 build/
 dist/
 
+# TypeScript build cache
+*.tsbuildinfo
+**/*.tsbuildinfo
+
 # Vercel
 .vercel/
 **/.vercel/**
@@ -55,4 +59,3 @@ render_workspace/
 *.mp4
 *.mp3
 *.wav
-
