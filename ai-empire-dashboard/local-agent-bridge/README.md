@@ -24,8 +24,14 @@ python build_zcode_perfect_pipeline.py \
   --title "Judul Shorts Kamu" \
   --source "NAMA CHANNEL" \
   --caption-style yellow \
+  --cover-style cloud_emerald \
   --source-url "https://youtu.be/xxx"
 ```
+
+#### Pilihan Style Cover:
+- `black_yellow`: Rounded pill glassmorphism hitam + kuning solid
+- `cloud_emerald`: Siluet awan organik puffy cloud + aksen hijau emerald/cyan
+- `cyber_crimson`: Badge chamfer octagon futuristik + neon crimson red
 
 ### 2. Worker Antrean Otomatis (dari Supabase)
 ```bash
