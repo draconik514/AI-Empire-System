@@ -1125,8 +1125,12 @@ def calculate_smart_crop_timeline(video_path: str, crop_w: int = 606, crop_h: in
         t, cx = raw_positions[i]
         target_x = max(0, min(W - crop_w, cx - crop_w // 2))
 
-        # Jika perpindahan kamera signifikan (ganti orang/scene switch) dengan jeda minimal 1.2 detik
-        if abs(target_x - current_x) > 150 and (t - seg_start) >= 1.2:
+        # Perpindahan kamera responsif & halus:
+        # Jika lompatan scene sangat besar (> 300px, misal cut ganti orang): transisi instan dalam 0.8 detik
+        # Jika gerakan biasa (> 140px): transisi dalam 1.2 detik
+        jump_dist = abs(target_x - current_x)
+        min_gap = 0.8 if jump_dist > 300 else 1.2
+        if jump_dist > 140 and (t - seg_start) >= min_gap:
             segments.append((seg_start, t, current_x))
             current_x = target_x
             seg_start = t
