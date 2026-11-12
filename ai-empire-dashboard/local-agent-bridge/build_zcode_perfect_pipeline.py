@@ -624,8 +624,8 @@ def generate_ai_voice_hook(title: str, out_mp3: str) -> float:
     print(f"🎙️ AI Voice-Over Hook selesai dibuat: {dur:.2f} detik")
     return dur
 
-def generate_animated_cover_segment(top_half, bot_half, title: str, hook_audio_path: str, duration_sec: float, out_clip_path: str):
-    """Merender video intro cover dengan durasi tepat sesuai audio AI VO Hook dan motion spring pada rectangle title"""
+def generate_animated_cover_segment(top_half, bot_half, title: str, hook_audio_path: str, duration_sec: float, out_clip_path: str, cover_style: str = "black_yellow"):
+    """Merender video intro cover dengan durasi tepat sesuai audio AI VO Hook dan motion spring pada shape title (mendukung black_yellow, cloud_emerald, cyber_crimson)"""
     fps = 30.0
     total_frames = max(15, int(duration_sec * fps))
 
@@ -638,32 +638,102 @@ def generate_animated_cover_segment(top_half, bot_half, title: str, hook_audio_p
     line1 = " ".join(words[:mid]).upper()
     line2 = " ".join(words[mid:]).upper()
 
-    # Pre-render Banner Asset (Shadow + Yellow Card + Specular Highlight + Text) ONCE
-    card_w, card_h = 940, 240
-    margin = 40
+    card_w, card_h = 950, 240
+    margin = 50
     asset_w, asset_h = card_w + margin * 2, card_h + margin * 2
     card_asset = Image.new("RGBA", (asset_w, asset_h), (0, 0, 0, 0))
 
-    # Shadow (blurred once on small card_asset, NOT 1080x1920 120 times!)
-    s_layer = Image.new("RGBA", (asset_w, asset_h), (0, 0, 0, 0))
-    s_draw = ImageDraw.Draw(s_layer)
-    s_draw.rounded_rectangle([margin, margin + 8, margin + card_w, margin + card_h + 8], radius=42, fill=(0, 0, 0, 180))
-    s_layer = s_layer.filter(ImageFilter.GaussianBlur(16))
-    card_asset.paste(s_layer, (0, 0), s_layer)
+    if cover_style == "cloud_emerald":
+        # ☁️ VARIAN 2: BENTUK AWAN (Cloud Silhouette & Emerald Accent)
+        cloud_puffs = [
+            (margin + 90, margin + 120, 120),
+            (margin + 220, margin + 70, 130),
+            (margin + 390, margin + 50, 150),
+            (margin + 560, margin + 55, 145),
+            (margin + 730, margin + 70, 135),
+            (margin + 860, margin + 120, 115),
+            (margin + 770, margin + 180, 120),
+            (margin + 590, margin + 200, 130),
+            (margin + 370, margin + 195, 135),
+            (margin + 180, margin + 175, 120),
+        ]
+        s_layer = Image.new("RGBA", (asset_w, asset_h), (0, 0, 0, 0))
+        s_draw = ImageDraw.Draw(s_layer)
+        for cx_p, cy_p, r_p in cloud_puffs:
+            s_draw.ellipse([cx_p - r_p, cy_p - r_p + 10, cx_p + r_p, cy_p + r_p + 10], fill=(0, 0, 0, 180))
+        s_layer = s_layer.filter(ImageFilter.GaussianBlur(16))
+        card_asset.paste(s_layer, (0, 0), s_layer)
 
-    # Black Transparent Glass + Yellow Card Body (Tembus pandang melihat latar belakang video)
+        c_layer = Image.new("RGBA", (asset_w, asset_h), (0, 0, 0, 0))
+        c_draw = ImageDraw.Draw(c_layer)
+        for cx_p, cy_p, r_p in cloud_puffs:
+            c_draw.ellipse([cx_p - r_p, cy_p - r_p, cx_p + r_p, cy_p + r_p], fill=(12, 18, 30, 215))
+        c_draw.rounded_rectangle([margin + 60, margin + 40, margin + card_w - 60, margin + card_h - 20], radius=50, fill=(12, 18, 30, 215))
+        c_draw.rounded_rectangle([margin + 80, margin + 125, margin + card_w - 80, margin + card_h - 15], radius=28, fill=(0, 225, 160, 255), outline=(0, 0, 0, 255), width=4)
+        card_asset.paste(c_layer, (0, 0), c_layer)
+
+    elif cover_style == "cyber_crimson":
+        # ⚡ VARIAN 3: BENTUK BADGE / OCTAGON (Chamfer Corner & Neon Crimson)
+        cut = 45
+        y_mid_asset = margin + card_h // 2
+        poly_top = [
+            (margin + cut, margin),
+            (margin + card_w - cut, margin),
+            (margin + card_w, margin + cut),
+            (margin + card_w, y_mid_asset),
+            (margin, y_mid_asset),
+            (margin, margin + cut),
+        ]
+        poly_bot = [
+            (margin, y_mid_asset),
+            (margin + card_w, y_mid_asset),
+            (margin + card_w, margin + card_h - cut),
+            (margin + card_w - cut, margin + card_h),
+            (margin + cut, margin + card_h),
+            (margin, margin + card_h - cut),
+        ]
+        poly_full = [
+            (margin + cut, margin),
+            (margin + card_w - cut, margin),
+            (margin + card_w, margin + cut),
+            (margin + card_w, margin + card_h - cut),
+            (margin + card_w - cut, margin + card_h),
+            (margin + cut, margin + card_h),
+            (margin, margin + card_h - cut),
+            (margin, margin + cut),
+        ]
+        s_layer = Image.new("RGBA", (asset_w, asset_h), (0, 0, 0, 0))
+        s_draw = ImageDraw.Draw(s_layer)
+        s_draw.polygon([(p[0], p[1] + 12) for p in poly_full], fill=(0, 0, 0, 190))
+        s_layer = s_layer.filter(ImageFilter.GaussianBlur(18))
+        card_asset.paste(s_layer, (0, 0), s_layer)
+
+        b_layer = Image.new("RGBA", (asset_w, asset_h), (0, 0, 0, 0))
+        b_draw = ImageDraw.Draw(b_layer)
+        b_draw.polygon(poly_top, fill=(18, 12, 34, 215))
+        b_draw.polygon(poly_bot, fill=(255, 30, 85, 255))
+        b_draw.polygon(poly_full, outline=(0, 0, 0, 255), width=6)
+        b_draw.line([(margin, y_mid_asset), (margin + card_w, y_mid_asset)], fill=(0, 0, 0, 255), width=6)
+        card_asset.paste(b_layer, (0, 0), b_layer)
+
+    else:
+        # 🟡 VARIAN 1: DEFAULT BLACK TRANSLUCENT GLASS + SOLID YELLOW BANNER
+        s_layer = Image.new("RGBA", (asset_w, asset_h), (0, 0, 0, 0))
+        s_draw = ImageDraw.Draw(s_layer)
+        s_draw.rounded_rectangle([margin, margin + 8, margin + card_w, margin + card_h + 8], radius=42, fill=(0, 0, 0, 180))
+        s_layer = s_layer.filter(ImageFilter.GaussianBlur(16))
+        card_asset.paste(s_layer, (0, 0), s_layer)
+
+        c_draw = ImageDraw.Draw(card_asset)
+        y_mid_asset = margin + card_h // 2
+        c_draw.rounded_rectangle([margin, margin, margin + card_w, y_mid_asset], radius=42, corners=(True, True, False, False), fill=(10, 12, 16, 145))
+        c_draw.rounded_rectangle([margin + 4, margin + 3, margin + card_w - 4, margin + 32], radius=38, corners=(True, True, False, False), fill=(255, 255, 255, 30))
+        c_draw.rounded_rectangle([margin, y_mid_asset, margin + card_w, margin + card_h], radius=42, corners=(False, False, True, True), fill=(255, 222, 0, 255))
+        c_draw.rounded_rectangle([margin, margin, margin + card_w, margin + card_h], radius=42, outline=(0, 0, 0, 255), width=5)
+        c_draw.line([(margin, y_mid_asset), (margin + card_w, y_mid_asset)], fill=(0, 0, 0, 255), width=5)
+
+    # Teks pada Card (Font Impact Outlined)
     c_draw = ImageDraw.Draw(card_asset)
-    y_mid_asset = margin + card_h // 2
-    # 1. Paruh Atas: Hitam Glassmorphism Transparan (Tembus pandang melihat latar belakang video)
-    c_draw.rounded_rectangle([margin, margin, margin + card_w, y_mid_asset], radius=42, corners=(True, True, False, False), fill=(10, 12, 16, 145))
-    c_draw.rounded_rectangle([margin + 4, margin + 3, margin + card_w - 4, margin + 32], radius=38, corners=(True, True, False, False), fill=(255, 255, 255, 30))
-    # 2. Paruh Bawah: Kuning Terang Solid
-    c_draw.rounded_rectangle([margin, y_mid_asset, margin + card_w, margin + card_h], radius=42, corners=(False, False, True, True), fill=(255, 222, 0, 255))
-    # 3. Garis Tepi & Pemisah Hitam Pekat
-    c_draw.rounded_rectangle([margin, margin, margin + card_w, margin + card_h], radius=42, outline=(0, 0, 0, 255), width=5)
-    c_draw.line([(margin, y_mid_asset), (margin + card_w, y_mid_asset)], fill=(0, 0, 0, 255), width=5)
-
-    # Text on Card (Keduanya teks putih dengan stroke hitam pekat)
     font_size = 68
     try:
         font = ImageFont.truetype("impact.ttf", font_size)
@@ -978,18 +1048,23 @@ def calculate_smart_crop_timeline(video_path: str, crop_w: int = 606, crop_h: in
         gray2 = cv2.cvtColor(f2, cv2.COLOR_BGR2GRAY)
 
         faces = face_cascade.detectMultiScale(gray1, 1.15, 4, minSize=(60, 60))
-        # Filter ketat: Hanya wajah di separuh atas layar (menghindari deteksi tangan/subtitel/layar laptop di bawah)
-        valid_faces = [f for f in faces if f[2] >= 75 and f[1] < H * 0.50]
+        # Filter ketat: Wajah manusia asli di area podcast (H*0.08 s/d H*0.55), dan BUKAN logo di pojok kiri atas (x < 160 & y < 140)
+        valid_faces = [
+            f for f in faces
+            if f[2] >= 85 and (H * 0.08 <= f[1] < H * 0.55) and not (f[0] < 160 and f[1] < 140)
+        ]
 
         if len(valid_faces) == 0:
-            # Fallback jika wajah menoleh/profil: deteksi daerah kulit terang di separuh atas
+            # Fallback jika wajah menoleh/profil: deteksi daerah kulit terang di separuh atas (hindari pojok kiri)
             hsv = cv2.cvtColor(f1, cv2.COLOR_BGR2HSV)
             skin = cv2.inRange(hsv, (0, 25, 50), (30, 200, 255))
-            contours, _ = cv2.findContours(skin[:int(H * 0.50), :], cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            # Mask out logo corner
+            skin[:150, :200] = 0
+            contours, _ = cv2.findContours(skin[int(H*0.08):int(H * 0.55), :], cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             found_skin = False
             if contours:
                 best_c = max(contours, key=cv2.contourArea)
-                if cv2.contourArea(best_c) > 1200:
+                if cv2.contourArea(best_c) > 1500:
                     bx, by, bw, bh = cv2.boundingRect(best_c)
                     skin_cx = bx + bw // 2
                     prev_active_cx = skin_cx
@@ -1089,7 +1164,7 @@ def render_and_upload(raw_video: str, title: str, source_channel: str, queue_id:
     # 3. AI Voice-Over Hook dari Judul Cover & Animated Motion Cover Segment
     update_queue_progress(queue_id, "Rendering (35%)", "🎙️ [35%] Memproduksi AI Voice-Over Hook & Animasi Motion Cover...")
     dur_hook = generate_ai_voice_hook(title, hook_mp3)
-    generate_animated_cover_segment(top_half, bot_half, title, hook_mp3, dur_hook, cover_segment_mp4)
+    generate_animated_cover_segment(top_half, bot_half, title, hook_mp3, dur_hook, cover_segment_mp4, cover_style=cover_style)
 
     # 4. Transkripsi Audio BARU dari Video Ini via Whisper
     update_queue_progress(queue_id, "Rendering (50%)", "🎙️ [50%] Mentranskrip suara video asli per kata via Groq Whisper AI...")
