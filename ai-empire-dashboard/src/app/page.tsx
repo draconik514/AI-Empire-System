@@ -761,7 +761,7 @@ export default function AIEmpireDashboard() {
                     </span>
                   </div>
 
-                  {/* Top Yellow Cover Box Title Preview + Floating Emojis */}
+                  {/* Top Cover Box Title Preview + Floating Emojis */}
                   <div className="relative z-10 mt-10 px-2">
                     {/* Floating Emojis Outside Card */}
                     <div className="flex justify-end mb-1">
@@ -769,9 +769,25 @@ export default function AIEmpireDashboard() {
                         😱 💔 ⚠️
                       </span>
                     </div>
-                    <div className="bg-[#FFE600] text-black font-black text-xs px-3 py-2 rounded-xl text-center leading-tight shadow-lg border-2 border-white uppercase tracking-tight">
-                      {islamicTitle || "TITLE BOX KUNING DI SINI"}
-                    </div>
+
+                    {/* Dynamic Shape based on islamicCoverStyle */}
+                    {islamicCoverStyle === "cloud_emerald" && (
+                      <div className="bg-[#0c121e]/90 text-white font-black text-xs px-3 py-2 rounded-[22px] text-center leading-tight shadow-lg border-2 border-emerald-400/80 uppercase tracking-tight relative overflow-hidden">
+                        <div className="text-[10px] text-emerald-300">☁️ AWAN EMERALD</div>
+                        <div className="text-[#00E1A0] font-black">{islamicTitle || "TITLE BOX DI SINI"}</div>
+                      </div>
+                    )}
+                    {islamicCoverStyle === "cyber_crimson" && (
+                      <div className="bg-[#120c22]/95 text-white font-black text-xs px-3 py-2 text-center leading-tight shadow-lg border-2 border-rose-500 uppercase tracking-tight [clip-path:polygon(10%_0%,90%_0%,100%_25%,100%_75%,90%_100%,10%_100%,0%_75%,0%_25%)]">
+                        <div className="text-[10px] text-rose-300">⚡ BADGE CRIMSON</div>
+                        <div className="text-[#FF1E55] font-black">{islamicTitle || "TITLE BOX DI SINI"}</div>
+                      </div>
+                    )}
+                    {islamicCoverStyle === "black_yellow" && (
+                      <div className="bg-[#FFE600] text-black font-black text-xs px-3 py-2 rounded-xl text-center leading-tight shadow-lg border-2 border-white uppercase tracking-tight">
+                        {islamicTitle || "TITLE BOX KUNING DI SINI"}
+                      </div>
+                    )}
                   </div>
 
                   {/* Center Speaker Simulation */}
