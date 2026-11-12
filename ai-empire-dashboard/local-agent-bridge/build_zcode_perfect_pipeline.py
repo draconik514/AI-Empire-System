@@ -1078,9 +1078,13 @@ def calculate_smart_crop_timeline(video_path: str, crop_w: int = 606, crop_h: in
             raw_positions.append((t, cx))
         else:
             # Multi-person / Two-shot: Analisis gerakan bibir (mouth motion)
+            # Prioritaskan wajah yang cukup besar (bukan figura/foto di latar belakang)
+            primary_candidates = [f for f in valid_faces if f[2] >= 140]
+            eval_faces = primary_candidates if primary_candidates else valid_faces
+
             best_face = None
             max_motion = -1.0
-            for f in valid_faces:
+            for f in eval_faces:
                 fx, fy, fw, fh = f
                 my1 = fy + int(fh * 0.65)
                 my2 = fy + int(fh * 0.95)
@@ -1095,16 +1099,17 @@ def calculate_smart_crop_timeline(video_path: str, crop_w: int = 606, crop_h: in
                     max_motion = motion
                     best_face = f
 
-            # Jika gerakan mulut > 1.8: orang ini sedang bicara -> ganti kamera ke dia
-            if best_face is not None and max_motion > 1.8:
+            # Jika gerakan mulut > 1.5: orang ini sedang aktif bicara -> ganti kamera ke dia
+            if best_face is not None and max_motion > 1.5:
                 cx = best_face[0] + best_face[2] // 2
                 prev_active_cx = cx
                 raw_positions.append((t, cx))
             else:
-                # Jika hening dan prev masih default di tengah: fokuskan ke orang pertama agar tidak memotong di tengah
-                if prev_active_cx == W // 2 and valid_faces:
-                    prev_active_cx = valid_faces[0][0] + valid_faces[0][2] // 2
-                raw_positions.append((t, prev_active_cx))
+                # Jika gerakan mulut kecil: cari wajah terdekat dengan posisi kamera sebelumnya agar tidak melompat acak
+                closest_face = min(eval_faces, key=lambda f: abs((f[0] + f[2]//2) - prev_active_cx))
+                cx = closest_face[0] + closest_face[2] // 2
+                prev_active_cx = cx
+                raw_positions.append((t, cx))
 
     cap.release()
 
